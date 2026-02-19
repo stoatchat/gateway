@@ -14,7 +14,7 @@ defmodule StoatGateway.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger],
+      extra_applications: [:logger, :observer, :wx],
       mod: {StoatGateway.Application, []}
     ]
   end
@@ -23,7 +23,8 @@ defmodule StoatGateway.MixProject do
   defp deps do
     [
       {:bandit, "~> 1.10"},
-      {:websock_adapter, "~> 0.5.9"}
+      {:websock_adapter, "~> 0.5.9"},
+      {:broadway_rabbitmq, "~> 0.8.2"},
     ]
   end
 end
