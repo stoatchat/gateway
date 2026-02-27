@@ -5,9 +5,9 @@ defmodule StoatGateway.Events.Consumer do
     Broadway.start_link(__MODULE__,
       name: StoatGateway.Events.Consumer,
       producer: [
-        module: {Broadway.RabbitMQ.Producer,
+        module: {BroadwayRabbitMQ.Producer,
           queue: "stoat_events",
-          quos: [prefetch_count: 10],
+          qos: [prefetch_count: 10],
           on_failure: :reject
         },
         concurrency: 1
