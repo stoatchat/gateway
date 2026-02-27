@@ -1,6 +1,4 @@
 defmodule StoatGateway.Application do
-  # See https://hexdocs.pm/elixir/Application.html
-  # for more information on OTP Applications
   @moduledoc false
 
   use Application
@@ -8,12 +6,10 @@ defmodule StoatGateway.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      {Bandit, plug: StoatGateway.Web.Router, scheme: :http},
+      {Bandit, plug: StoatGateway.Web.Router, scheme: :http, port: Application.get_env(:stoat_gateway, :ws_port)},
       StoatGateway.Events.Consumer
     ]
 
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
     opts = [strategy: :one_for_one, name: StoatGateway.Supervisor]
     Supervisor.start_link(children, opts)
   end
