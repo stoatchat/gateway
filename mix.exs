@@ -25,6 +25,7 @@ defmodule StoatGateway.MixProject do
       {:bandit, "~> 1.10"},
       {:websock_adapter, "~> 0.5.9"},
       {:broadway_rabbitmq, "~> 0.8.2"},
+      {:jason, "~> 1.4"}
     ]
   end
 end

@@ -8,7 +8,8 @@ defmodule StoatGateway.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      {Bandit, plug: StoatGateway.Web.Router, scheme: :http}
+      {Bandit, plug: StoatGateway.Web.Router, scheme: :http},
+      StoatGateway.Events.Consumer
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
