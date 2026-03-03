@@ -15,7 +15,7 @@ defmodule StoatGateway.MixProject do
   def application do
     [
       extra_applications: [:logger, :observer, :wx],
-      mod: {StoatGateway.Application, []}
+      mod: {StoatGateway, []}
     ]
   end
 
