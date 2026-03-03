@@ -6,9 +6,15 @@ defmodule StoatGateway.Web.Router do
   plug (:dispatch)
   
   get "/ws" do
-    conn  # Double check this is OK, need to check for upgrade headers.
-    |> WebSockAdapter.upgrade(StoatGateway.Web.SocketHandler, [], timeout: 10_000)
-    |> halt()
+    upgrade_header = get_req_header(conn, "upgrade")
+    case upgrade_header do
+      ["websocket"] ->
+        conn = fetch_query_params(conn)
+        conn
+        |> WebSockAdapter.upgrade(StoatGateway.Web.SocketHandler, conn.query_params, timeout: 10_000)
+        |> halt()
+      _ ->  send_resp(conn, 400, "No upgrade headers")
+    end
   end
 
 
