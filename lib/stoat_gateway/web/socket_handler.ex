@@ -27,6 +27,12 @@ defmodule StoatGateway.Web.SocketHandler do
   # v2 proto should definitely have an Enum for type and a consistent data key
   # then we can just case a payload and extract those and handle each event as
   # def handle_payload(EVENT_TYPE, %Stoat.TypingEvent{} = data, state) do...
+
+
+  def handle_payload(%{"type" => "Ping"} = _payload, state) do
+    {:push, encode_frame(%{type: "Pong", data: System.os_time()}, state.format), state}
+  end
+
   def handle_payload(%{"type" => "StartTyping"} = _payload, state) do
     {:push, encode_frame(%{test: "test"}, state.format), state}
   end
