@@ -33,9 +33,14 @@ defmodule StoatGateway.Web.SocketHandler do
     {:push, encode_frame(%{type: "Pong", data: System.os_time()}, state.format), state}
   end
 
-  def handle_payload(%{"type" => "StartTyping"} = _payload, state) do
+  def handle_payload(%{"type" => "BeginTyping"} = _payload, state) do
     {:push, encode_frame(%{test: "test"}, state.format), state}
   end
+  
+  def handle_payload(%{"type" => "EndTyping"} = _payload, state) do
+    {:push, encode_frame(%{test: "test"}, state.format), state}
+  end
+
 
   def handle_payload(_, state) do
     {:stop, :normal, 1007, encode_frame(%{"error" => "invalid payload"}, state.format),state}
