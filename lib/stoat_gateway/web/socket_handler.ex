@@ -1,5 +1,6 @@
 defmodule StoatGateway.Web.SocketHandler do
   require Logger
+  alias StoatGateway.Session
 
   defstruct [ready: false, format: :json]
   @type t :: %__MODULE__{ready: boolean, format: String.t()}
@@ -10,6 +11,19 @@ defmodule StoatGateway.Web.SocketHandler do
       {:ok, "etf"} -> :etf
       {:ok, "msgpack"} -> :msgpack
       _ -> :json 
+    end
+    
+    user = case Map.fetch(query_params, "token") do
+      {:ok, token} -> StoatGateway.Auth.find_by_token(token)
+      _ -> nil
+    end
+    
+    # TODO(twitch): Honestly just make the above error and we can just catch that in terminate
+    case user do
+      {type, data} -> 
+        # Start the session process
+        {:ok, pid} = DynamicSupervisor.start_child(StoatGateway.Sessions.Supervisor, {Session, data})
+      _ -> nil
     end
     {:ok, %__MODULE__{ready: true, format: format}}
   end

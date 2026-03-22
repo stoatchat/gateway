@@ -14,7 +14,6 @@ defmodule StoatGateway.Auth do
   # Avoid calling db if nil
   def find_by_token(nil), do: nil
 
-
   defp user_from_token(token), do: Mongo.find_one(:mongo_db, "sessions", %{"token" => token})
   defp bot_from_token(token), do: Mongo.find_one(:mongo_db, "bots", %{"token" => token})
 end
