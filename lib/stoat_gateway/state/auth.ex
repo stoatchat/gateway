@@ -1,6 +1,6 @@
 defmodule StoatGateway.Auth do
 
-  def find_by_token(token) when not is_nil(token) do 
+  def find_by_token(token) when is_binary(token) do 
     # Potentially rethink?
     case user_from_token(token) do
       %{"user_id" => _user_id} = payload -> {:user, payload}
