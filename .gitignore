@@ -25,3 +25,6 @@ stoat_gateway-*.tar
 # IntelliJ IDEA
 .idea/
 stoat_gateway.iml
+
+# Vim
+*.swp
