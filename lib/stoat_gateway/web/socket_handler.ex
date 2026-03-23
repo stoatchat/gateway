@@ -22,7 +22,7 @@ defmodule StoatGateway.Web.SocketHandler do
     case user do
       {type, data} -> 
         # Start the session process
-        {:ok, pid} = DynamicSupervisor.start_child(StoatGateway.Sessions.Supervisor, {Session, data})
+        {:ok, _pid} = DynamicSupervisor.start_child(StoatGateway.Sessions.Supervisor, {Session, %{data: data, socket: self(), type: type}})
       _ -> nil
     end
     {:ok, %__MODULE__{ready: true, format: format}}
@@ -58,6 +58,10 @@ defmodule StoatGateway.Web.SocketHandler do
 
   def handle_payload(_, state) do
     {:stop, :normal, 1007, encode_frame(%{"error" => "invalid payload"}, state.format),state}
+  end
+
+  def handle_info({:ready, payload}, state) do
+    {:push, encode_frame(payload, state.format), state}
   end
 
   def handle_info(_, state) do
