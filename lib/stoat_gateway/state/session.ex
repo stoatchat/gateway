@@ -29,8 +29,12 @@ defmodule StoatGateway.Session do
   end
 
   def handle_continue(:ready, state) do
+    server_ids = Stoat.User.fetch_server_memberships(state.user_id)
+    servers = Stoat.Server.fetch_many(server_ids)
+    channel_ids = servers |> Enum.to_list |> Enum.map(& &1["channels"]) |> List.flatten
+    channels = Mongo.find(:mongo_db, "channels", %{_id: %{"$in": channel_ids}}) |> Enum.to_list
 
-    ready_payload = %Stoat.State.Ready{}
+    ready_payload = %Stoat.State.Ready{servers: servers, channels: channels}
     send(state.linked_socket, {:ready, ready_payload})
     {:noreply, %{state | ready: true}}
   end
