@@ -31,7 +31,9 @@ defmodule StoatGateway.Session do
   def handle_continue(:ready, state) do
     server_ids = Stoat.User.fetch_server_memberships(state.user_id)
     servers = Stoat.Server.fetch_many(server_ids)
+
     channel_ids = servers |> Enum.to_list |> Enum.map(& &1["channels"]) |> List.flatten
+    # TODO: calculate viewable channels with permissions
     channels = Mongo.find(:mongo_db, "channels", %{_id: %{"$in": channel_ids}}) |> Enum.to_list
 
     ready_payload = %Stoat.State.Ready{servers: servers, channels: channels}
