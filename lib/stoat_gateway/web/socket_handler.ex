@@ -1,33 +1,30 @@
 defmodule StoatGateway.Web.SocketHandler do
   require Logger
-  alias StoatGateway.Session
 
   @behaviour WebSock
 
   defstruct [ready: false, format: :json]
-  @type t :: %__MODULE__{ready: boolean, format: String.t()}
+  @type t :: %__MODULE__{ready: boolean(), format: String.t()}
 
   @impl true
   def init(query_params) do
     format = case Map.fetch(query_params, "format") do
       {:ok, "etf"} -> :etf
       {:ok, "msgpack"} -> :msgpack
-      _ -> :json 
+      _ -> :json
     end
 
-    user = case Map.fetch(query_params, "token") do
-      {:ok, token} -> StoatGateway.Auth.find_by_token(token)
-      _ -> nil
+    with {:ok, token} <- Map.fetch(query_params, "token"),
+         {type, data} <- StoatGateway.Auth.find_by_token(token) do
+      # Start the session process
+      {:ok, _pid} = DynamicSupervisor.start_child(
+        StoatGateway.Sessions.Supervisor,
+        {StoatGateway.Session, %{data: data, socket: self(), type: type}}
+      )
+      {:ok, %__MODULE__{ready: true, format: format}}
+    else
+      _ -> {:stop, {:error, "Invalid token"}, %__MODULE__{ready: false, format: format}}
     end
-
-    # TODO(twitch): Honestly just make the above error and we can just catch that in terminate
-    case user do
-      {type, data} -> 
-        # Start the session process
-        {:ok, _pid} = DynamicSupervisor.start_child(StoatGateway.Sessions.Supervisor, {Session, %{data: data, socket: self(), type: type}})
-      _ -> nil
-    end
-    {:ok, %__MODULE__{ready: true, format: format}}
   end
 
   @impl true

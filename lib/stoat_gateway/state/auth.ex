@@ -1,5 +1,6 @@
 defmodule StoatGateway.Auth do
 
+  @spec find_by_token(String.t()) :: {:user | :bot, map()} | nil
   def find_by_token(token) when is_binary(token) do 
     # Potentially rethink?
     case user_from_token(token) do
@@ -10,9 +11,9 @@ defmodule StoatGateway.Auth do
       end
     end
   end
-  
-  # Avoid calling db if nil
-  def find_by_token(nil), do: nil
+
+  # Avoid calling db if not a string
+  def find_by_token(_), do: nil
 
   defp user_from_token(token), do: Mongo.find_one(:mongo_db, "sessions", %{"token" => token})
   defp bot_from_token(token), do: Mongo.find_one(:mongo_db, "bots", %{"token" => token})
