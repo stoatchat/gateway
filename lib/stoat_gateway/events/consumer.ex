@@ -1,16 +1,16 @@
 defmodule StoatGateway.Events.Consumer do
   use Broadway
-  
+
   def start_link(_) do
     Broadway.start_link(__MODULE__,
       name: StoatGateway.Events.Consumer,
       producer: [
-        module: {BroadwayRabbitMQ.Producer,
-          connection: Application.get_env(:stoat_gateway, :rabbit),
-          queue: "stoat_events",
-          qos: [prefetch_count: 10],
-          on_failure: :reject
-        },
+        module:
+          {BroadwayRabbitMQ.Producer,
+           connection: Application.get_env(:stoat_gateway, :rabbit),
+           queue: "stoat_events",
+           qos: [prefetch_count: 10],
+           on_failure: :reject},
         concurrency: 1
       ],
       processors: [default: [concurrency: 100]]

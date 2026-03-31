@@ -4,6 +4,7 @@ defmodule Stoat.Server do
   # 2) We can just send the client a list of server ids on ready
   # 3) 
   def fetch_by_id(id) when is_binary(id), do: Mongo.find_one(:mongo_db, "servers", %{"_id" => id})
-  def fetch_many(ids) when is_list(ids), do: Mongo.find(:mongo_db, "servers", %{_id: %{"$in": ids}}) |> Enum.to_list
 
+  def fetch_many(ids) when is_list(ids),
+    do: Mongo.find(:mongo_db, "servers", %{_id: %{"$in": ids}}) |> Enum.to_list()
 end

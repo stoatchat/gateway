@@ -1,7 +1,27 @@
 defmodule StoatGateway.Server do
   use GenServer
 
+  defstruct id: nil,
+            # monitor_ref: {socket_pid, %User}
+            linked_sockets: %{}
+
+  def start_link(%{id: id}) do
+    GenServer.start_link(__MODULE__, %__MODULE__{id: id})
+  end
+
   def init(state) do
+    # TODO: Add into state, fully define struct first
+    server = Stoat.Server.fetch_by_id(state.id)
+    {:ok, state, {:continue, :get_state}}
+  end
+
+  def handle_continue(:get_state, state) do
     {:ok, state}
+  end
+
+  def link_session(id, user_id, session_pid) do
+  end
+
+  def dispatch_event(id, event, data) do
   end
 end

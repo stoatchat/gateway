@@ -3,24 +3,27 @@ defmodule StoatGateway.Web.SocketHandler do
 
   @behaviour WebSock
 
-  defstruct [ready: false, format: :json]
+  defstruct ready: false, format: :json
   @type t :: %__MODULE__{ready: boolean(), format: String.t()}
 
   @impl true
   def init(query_params) do
-    format = case Map.get(query_params, "format") do
-      "etf" -> :etf
-      "msgpack" -> :msgpack
-      _ -> :json
-    end
+    format =
+      case Map.get(query_params, "format") do
+        "etf" -> :etf
+        "msgpack" -> :msgpack
+        _ -> :json
+      end
 
     with {:ok, token} <- Map.fetch(query_params, "token"),
          {type, data} <- StoatGateway.Auth.find_by_token(token) do
       # Start the session process
-      {:ok, _pid} = DynamicSupervisor.start_child(
-        StoatGateway.Sessions.Supervisor,
-        {StoatGateway.Session, %{data: data, socket: self(), type: type}}
-      )
+      {:ok, _pid} =
+        DynamicSupervisor.start_child(
+          StoatGateway.Sessions.Supervisor,
+          {StoatGateway.Session, %{data: data, socket: self(), type: type}}
+        )
+
       {:ok, %__MODULE__{ready: true, format: format}}
     else
       _ -> {:stop, {:error, "Invalid token"}, %__MODULE__{ready: false, format: format}}
@@ -30,9 +33,11 @@ defmodule StoatGateway.Web.SocketHandler do
   @impl true
   def handle_in({frame, opcode: _}, state) do
     data = decode_frame(frame, state.format)
+
     case data do
       {:ok, payload} -> handle_payload(payload, state)
-      _ -> {:stop, :normal, 1007, encode_frame(%{error: "invalid"}, state.format), state} # TODO: Correct error format
+      # TODO: Correct error format
+      _ -> {:stop, :normal, 1007, encode_frame(%{error: "invalid"}, state.format), state}
     end
   end
 
@@ -55,7 +60,7 @@ defmodule StoatGateway.Web.SocketHandler do
   end
 
   def handle_payload(_, state) do
-    {:stop, :normal, 1007, encode_frame(%{"error" => "invalid payload"}, state.format),state}
+    {:stop, :normal, 1007, encode_frame(%{"error" => "invalid payload"}, state.format), state}
   end
 
   @impl true
@@ -70,7 +75,7 @@ defmodule StoatGateway.Web.SocketHandler do
 
   @impl true
   def terminate(:timeout, state) do
-    {:ok, state}  
+    {:ok, state}
   end
 
   @impl true
