@@ -8,9 +8,9 @@ defmodule StoatGateway.Web.SocketHandler do
 
   @impl true
   def init(query_params) do
-    format = case Map.fetch(query_params, "format") do
-      {:ok, "etf"} -> :etf
-      {:ok, "msgpack"} -> :msgpack
+    format = case Map.get(query_params, "format") do
+      "etf" -> :etf
+      "msgpack" -> :msgpack
       _ -> :json
     end
 
