@@ -26,7 +26,9 @@ defmodule StoatGateway.Web.SocketHandler do
 
       {:ok, %__MODULE__{ready: true, format: format}}
     else
-      _ -> {:stop, {:error, "Invalid token"}, %__MODULE__{ready: false, format: format}}
+      _ ->
+        {:stop, :normal, 1007, build_error("InvalidSession", format),
+         %__MODULE__{ready: false, format: format}}
     end
   end
 
@@ -37,7 +39,7 @@ defmodule StoatGateway.Web.SocketHandler do
     case data do
       {:ok, payload} -> handle_payload(payload, state)
       # TODO: Correct error format
-      _ -> {:stop, :normal, 1007, encode_frame(%{error: "invalid"}, state.format), state}
+      _ -> {:stop, :normal, 1007, build_error("InvalidPayload", state.format), state}
     end
   end
 
@@ -60,7 +62,7 @@ defmodule StoatGateway.Web.SocketHandler do
   end
 
   def handle_payload(_, state) do
-    {:stop, :normal, 1007, encode_frame(%{"error" => "invalid payload"}, state.format), state}
+    {:stop, :normal, 1007, build_error("InvalidPayload", state.format), state}
   end
 
   @impl true
@@ -89,6 +91,12 @@ defmodule StoatGateway.Web.SocketHandler do
     {:ok, state}
   end
 
+  @spec build_error(binary(), atom()) :: {:text | :binary, binary()}
+  defp build_error(detail, format) do
+    encode_frame(%{type: "Error", data: %{type: detail}}, format)
+  end
+
+  @spec encode_frame(map(), :json | :etf | :msgpack) :: {:text | :binary, binary()}
   defp encode_frame(frame, :json), do: {:text, Jason.encode!(frame)}
   defp encode_frame(frame, :etf), do: {:binary, :erlang.term_to_binary(frame)}
   defp encode_frame(frame, :msgpack), do: {:binary, :msgpack.pack(frame)}
