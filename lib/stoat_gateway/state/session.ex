@@ -37,7 +37,7 @@ defmodule StoatGateway.Session do
           linked_servers: list()
         }
 
-  def start_link(%{socket: socket, data: %{"user_id" => id, "_id" => session} = data}) do
+  def start_link(%{socket: socket, data: %{"user_id" => id, "_id" => session} = _data}) do
     GenServer.start_link(__MODULE__, %__MODULE__{
       user_id: id,
       linked_socket: socket,
@@ -71,8 +71,7 @@ defmodule StoatGateway.Session do
         %__MODULE__{:linked_socket => socket_pid} = state
       ) do
     # TODO(twitch): Check for ref to a linked server
-    case pid do
-      socket_pid ->
+    if pid == socket_pid do
         # Websocket has disconnected- go into a no-forwarding mode until we timeout or have a new session
         Logger.debug(
           "session: #{inspect(self())} received :DOWN from linked socket- into nonforward mode"
@@ -80,8 +79,7 @@ defmodule StoatGateway.Session do
 
         Process.send_after(self(), :check_socket_timeout, @socket_disconnect_timeout)
         {:noreply, %{state | forwarding: false}}
-
-      _ ->
+    else
         {:noreply, state}
     end
   end
