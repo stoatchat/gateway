@@ -12,21 +12,32 @@ defmodule Stoat.State.Ready do
 end
 
 defmodule StoatGateway.Session do
-  use GenServer
+  use GenServer, restart: :transient
+  require Logger
+  # Arbitrary 30s timeout to resume
+  @socket_disconnect_timeout 30_000
 
-  defstruct ready: false, user_id: nil, session: nil, linked_socket: nil, type: :user
+  defstruct ready: false,
+            user_id: nil,
+            session: nil,
+            linked_socket: nil,
+            type: :user,
+            forwarding: true,
+            servers: [],
+            linked_servers: []
 
   @type t :: %__MODULE__{
-          ready: boolean,
+          ready: boolean(),
           user_id: String.t(),
           session: String.t(),
           linked_socket: pid(),
-          type: atom()
+          type: atom(),
+          forwarding: boolean(),
+          servers: list(),
+          linked_servers: list()
         }
 
   def start_link(%{socket: socket, data: %{"user_id" => id, "_id" => session} = data}) do
-    IO.inspect(data)
-
     GenServer.start_link(__MODULE__, %__MODULE__{
       user_id: id,
       linked_socket: socket,
@@ -36,7 +47,8 @@ defmodule StoatGateway.Session do
 
   def init(state) do
     # TODO: Add metrics here for connected session 
-    IO.puts("session: #{inspect(self())} with state: #{inspect(state)}")
+    Logger.debug("session: init self: #{inspect(self())} with state: #{inspect(state)}")
+    Process.monitor(state.linked_socket)
     {:ok, state, {:continue, :ready}}
   end
 
@@ -51,5 +63,37 @@ defmodule StoatGateway.Session do
     ready_payload = %Stoat.State.Ready{servers: servers, channels: channels}
     send(state.linked_socket, {:ready, ready_payload})
     {:noreply, %{state | ready: true}}
+  end
+
+  # Dead WS handling
+  def handle_info(
+        {:DOWN, _ref, :process, pid, _},
+        %__MODULE__{:linked_socket => socket_pid} = state
+      ) do
+    # TODO(twitch): Check for ref to a linked server
+    case pid do
+      socket_pid ->
+        # Websocket has disconnected- go into a no-forwarding mode until we timeout or have a new session
+        Logger.debug(
+          "session: #{inspect(self())} received :DOWN from linked socket- into nonforward mode"
+        )
+
+        Process.send_after(self(), :check_socket_timeout, @socket_disconnect_timeout)
+        {:noreply, %{state | forwarding: false}}
+
+      _ ->
+        {:noreply, state}
+    end
+  end
+
+  def handle_info(:check_socket_timeout, state) do
+    case Process.alive?(state.linked_socket) do
+      true ->
+        {:ok, state}
+
+      _ ->
+        Logger.debug("session: terminating session #{inspect(self())} due to socket timeout")
+        {:stop, :normal, state}
+    end
   end
 end

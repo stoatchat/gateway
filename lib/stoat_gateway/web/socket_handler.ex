@@ -18,6 +18,7 @@ defmodule StoatGateway.Web.SocketHandler do
     with {:ok, token} <- Map.fetch(query_params, "token"),
          {type, data} <- StoatGateway.Auth.find_by_token(token) do
       # Start the session process
+      # TODO: Check for alive session process-
       {:ok, _pid} =
         DynamicSupervisor.start_child(
           StoatGateway.Sessions.Supervisor,
