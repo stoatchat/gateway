@@ -4,7 +4,10 @@ defmodule StoatGateway do
   @impl true
   def start(_type, _args) do
     children = [
-      {DynamicSupervisor, name: StoatGateway.Sessions.Supervisor, strategy: :one_for_one},
+      {Registry, keys: :unique, name: Stoat.Servers},
+      {Registry, keys: :unique, name: Stoat.Sessions},
+      {DynamicSupervisor, name: Stoat.Sessions.Supervisor, strategy: :one_for_one},
+      {DynamicSupervisor, name: Stoat.Servers.Supervisor, strategy: :one_for_one},
       {Bandit,
        plug: StoatGateway.Web.Router,
        scheme: :http,

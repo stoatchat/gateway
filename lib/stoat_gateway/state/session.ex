@@ -72,15 +72,15 @@ defmodule StoatGateway.Session do
       ) do
     # TODO(twitch): Check for ref to a linked server
     if pid == socket_pid do
-        # Websocket has disconnected- go into a no-forwarding mode until we timeout or have a new session
-        Logger.debug(
-          "session: #{inspect(self())} received :DOWN from linked socket- into nonforward mode"
-        )
+      # Websocket has disconnected- go into a no-forwarding mode until we timeout or have a new session
+      Logger.debug(
+        "session: #{inspect(self())} received :DOWN from linked socket- into nonforward mode"
+      )
 
-        Process.send_after(self(), :check_socket_timeout, @socket_disconnect_timeout)
-        {:noreply, %{state | forwarding: false}}
+      Process.send_after(self(), :check_socket_timeout, @socket_disconnect_timeout)
+      {:noreply, %{state | forwarding: false}}
     else
-        {:noreply, state}
+      {:noreply, state}
     end
   end
 
