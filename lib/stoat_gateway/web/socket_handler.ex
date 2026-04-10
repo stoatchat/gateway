@@ -21,7 +21,7 @@ defmodule StoatGateway.Web.SocketHandler do
       # TODO: Check for alive session process-
       {:ok, _pid} =
         DynamicSupervisor.start_child(
-          StoatGateway.Sessions.Supervisor,
+          Stoat.Sessions.Supervisor,
           {StoatGateway.Session, %{data: data, socket: self(), type: type}}
         )
 

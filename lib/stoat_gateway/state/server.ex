@@ -6,7 +6,23 @@ defmodule StoatGateway.Server do
             linked_sockets: %{}
 
   def start_link(%{id: id}) do
-    GenServer.start_link(__MODULE__, %__MODULE__{id: id})
+    GenServer.start_link(__MODULE__, %__MODULE__{id: id},
+      name: {:via, Registry, {Stoat.Servers, id}}
+    )
+  end
+
+  @spec lookup_or_start(binary()) :: {:ok, pid()} | {:error, atom()}
+  def lookup_or_start(id) do
+    case Registry.lookup(Stoat.Servers, id) do
+      [{server_pid, nil}] ->
+        {:ok, server_pid}
+
+      _ ->
+        DynamicSupervisor.start_child(
+          Stoat.Servers.Supervisor,
+          {StoatGateway.Server, %{id: id}}
+        )
+    end
   end
 
   def init(state) do
@@ -16,7 +32,7 @@ defmodule StoatGateway.Server do
   end
 
   def handle_continue(:get_state, state) do
-    {:ok, state}
+    {:noreply, state}
   end
 
   def link_session(id, user_id, session_pid) do
