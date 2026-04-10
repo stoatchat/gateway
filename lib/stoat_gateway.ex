@@ -5,7 +5,7 @@ defmodule StoatGateway do
   def start(_type, _args) do
     children = [
       {Registry, keys: :unique, name: Stoat.Servers},
-      {Registry, keys: :unique, name: Stoat.Sessions},
+      {Registry, keys: :duplicate, name: Stoat.Sessions},
       {DynamicSupervisor, name: Stoat.Sessions.Supervisor, strategy: :one_for_one},
       {DynamicSupervisor, name: Stoat.Servers.Supervisor, strategy: :one_for_one},
       {Bandit,
