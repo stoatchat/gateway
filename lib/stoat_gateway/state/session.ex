@@ -44,13 +44,15 @@ defmodule StoatGateway.Session do
         user_id: id,
         linked_socket: socket,
         session: session
-      }, name: {:via, Registry, {Stoat.Sessions, id}})
+      }
+    )
   end
 
   def init(state) do
     # TODO: Add metrics here for connected session 
     Logger.debug("session: init self: #{inspect(self())} with state: #{inspect(state)}")
     Process.monitor(state.linked_socket)
+    Registry.register(Stoat.Sessions, state.user_id, state.session)
     {:ok, state, {:continue, :ready}}
   end
 
