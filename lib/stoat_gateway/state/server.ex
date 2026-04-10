@@ -1,8 +1,9 @@
 defmodule StoatGateway.Server do
   use GenServer
+  require Logger
 
   defstruct id: nil,
-            # monitor_ref: {socket_pid, user_id}?
+            # monitor_ref: {user_id, socket_pid}?
             linked_sockets: []
 
   def start_link(%{id: id}) do
@@ -35,9 +36,21 @@ defmodule StoatGateway.Server do
     {:noreply, state}
   end
 
-  def link_session(id, user_id, session_pid) do
+  def dispatch_event(id, event, data) do
   end
 
-  def dispatch_event(id, event, data) do
+  def handle_cast({:link_session, user_id, session_pid}, state) do
+    Logger.debug("server:#{inspect(pid)} add session:#{user_id}:#{inspect(session_pid)}")
+    Process.monitor(session_pid)
+    {:noreply, %{state | linked_sockets: state.linked_sockets ++ [{user_id, session_pid}]}}
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, _}, state) do
+    {:noreply,
+     %{
+       state
+       | linked_sockets:
+           Enum.reject(state.linked_sockets, fn {u_id, session_pid} -> session_pid == pid end)
+     }}
   end
 end

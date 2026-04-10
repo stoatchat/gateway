@@ -62,6 +62,7 @@ defmodule StoatGateway.Session do
     server_pids =
       Enum.map(server_ids, fn server_id ->
         {:ok, pid} = StoatGateway.Server.lookup_or_start(server_id)
+        GenServer.cast(pid, {:link_session, state.user_id, self()})
         {server_id, pid}
       end)
 
