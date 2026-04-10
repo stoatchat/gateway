@@ -26,7 +26,8 @@ defmodule StoatGateway.MixProject do
       {:websock_adapter, "~> 0.5.9"},
       {:broadway_rabbitmq, "~> 0.8.2"},
       {:jason, "~> 1.4"},
-      {:msgpack, "~> 0.8.1"}
+      {:msgpack, "~> 0.8.1"},
+      {:mongodb_driver, "~> 1.6"}
     ]
   end
 end
