@@ -74,8 +74,7 @@ defmodule StoatGateway.Session do
 
     ready_payload = %Stoat.State.Ready{servers: servers, channels: channels}
     send(state.linked_socket, {:ready, ready_payload})
-    state = %{state | servers: server_pids}
-    {:noreply, %{state | ready: true}}
+    {:noreply, %{state | ready: true, linked_servers: server_pids}}
   end
 
   # Dead WS handling
