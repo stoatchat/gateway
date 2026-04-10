@@ -54,6 +54,11 @@ defmodule StoatGateway.Session do
 
   def handle_continue(:ready, state) do
     server_ids = Stoat.User.fetch_server_memberships(state.user_id)
+    server_pids = Enum.map(server_ids, fn server_id ->
+        {:ok, pid} = StoatGateway.Server.lookup_or_start(server_id) 
+        {server_id, pid}
+      end
+    )
     servers = Stoat.Server.fetch_many(server_ids)
 
     channel_ids = servers |> Enum.to_list() |> Enum.map(& &1["channels"]) |> List.flatten()
@@ -62,6 +67,7 @@ defmodule StoatGateway.Session do
 
     ready_payload = %Stoat.State.Ready{servers: servers, channels: channels}
     send(state.linked_socket, {:ready, ready_payload})
+    state = %{state | servers: server_pids} 
     {:noreply, %{state | ready: true}}
   end
 

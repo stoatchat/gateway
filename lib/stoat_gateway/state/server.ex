@@ -2,8 +2,8 @@ defmodule StoatGateway.Server do
   use GenServer
 
   defstruct id: nil,
-            # monitor_ref: {socket_pid, %User}
-            linked_sockets: %{}
+            # monitor_ref: {socket_pid, user_id}?
+            linked_sockets: []
 
   def start_link(%{id: id}) do
     GenServer.start_link(__MODULE__, %__MODULE__{id: id},
