@@ -40,7 +40,7 @@ defmodule StoatGateway.Server do
   end
 
   def handle_cast({:link_session, user_id, session_pid}, state) do
-    Logger.debug("server:#{inspect(pid)} add session:#{user_id}:#{inspect(session_pid)}")
+    Logger.debug("server:#{inspect(self())} add session:#{user_id}:#{inspect(session_pid)}")
     Process.monitor(session_pid)
     {:noreply, %{state | linked_sockets: state.linked_sockets ++ [{user_id, session_pid}]}}
   end
