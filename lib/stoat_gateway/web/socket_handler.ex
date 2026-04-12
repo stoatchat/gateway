@@ -3,8 +3,8 @@ defmodule StoatGateway.Web.SocketHandler do
 
   @behaviour WebSock
 
-  defstruct ready: false, format: :json
-  @type t :: %__MODULE__{ready: boolean(), format: String.t()}
+  defstruct ready: false, format: :json, linked_socket: nil
+  @type t :: %__MODULE__{ready: boolean(), format: String.t(), linked_socket: pid()}
 
   @impl true
   def init(query_params) do
@@ -19,13 +19,13 @@ defmodule StoatGateway.Web.SocketHandler do
          {type, data} <- StoatGateway.Auth.find_by_token(token) do
       # Start the session process
       # TODO: Check for alive session process-
-      {:ok, _pid} =
+      {:ok, socket_pid} =
         DynamicSupervisor.start_child(
           Stoat.Sessions.Supervisor,
           {StoatGateway.Session, %{data: data, socket: self(), type: type}}
         )
 
-      {:ok, %__MODULE__{ready: true, format: format}}
+      {:push, build_event(:Authenticated, format), %__MODULE__{ready: true, format: format, linked_socket: socket_pid}}
     else
       _ ->
         {:stop, :normal, 1007, build_error("InvalidSession", format),
@@ -90,6 +90,16 @@ defmodule StoatGateway.Web.SocketHandler do
   def terminate(:normal, state) do
     # Some sort of clean-up here
     {:ok, state}
+  end
+
+  @spec build_event(binary(), atom()) :: {:text | :binary, binary()}
+  defp build_event(event, format) do
+    encode_frame(%{type: event}, format)
+  end
+
+  @spec build_event(binary(), map(), atom()) :: {:text | :binary, binary()}
+  defp build_event(event, payload, format) do
+    encode_frame(%{type: event, data: payload}, format)
   end
 
   @spec build_error(binary(), atom()) :: {:text | :binary, binary()}
