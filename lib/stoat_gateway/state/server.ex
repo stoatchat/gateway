@@ -45,6 +45,11 @@ defmodule StoatGateway.Server do
     {:noreply, %{state | linked_sockets: state.linked_sockets ++ [{user_id, session_pid}]}}
   end
 
+  def handle_cast({:dispatch_begin_typing, channel_id, user_id}, state) do
+    Logger.debug("server:#{inspect(self())} dispatching typing by #{user_id} to #{channel_id}")
+    {:noreply, state}
+  end
+
   def handle_info({:DOWN, _ref, :process, pid, _}, state) do
     {:noreply,
      %{

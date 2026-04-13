@@ -77,6 +77,15 @@ defmodule StoatGateway.Session do
     {:noreply, %{state | ready: true, linked_servers: server_pids}}
   end
 
+  def handle_cast({:event_begin_typing, channel_id}, state) do
+    # TODO: Use state to find this
+    server_id = Stoat.Server.fetch_by_channel_id(channel_id)
+    case Enum.find(state.linked_servers, fn {id, _} -> id == server_id end) do
+      {_, pid} -> GenServer.cast(pid, {:dispatch_begin_typing, channel_id, state.user_id})
+    end
+    {:noreply, state}
+  end
+
   # Dead WS handling
   def handle_info(
         {:DOWN, _ref, :process, pid, _},

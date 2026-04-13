@@ -54,12 +54,13 @@ defmodule StoatGateway.Web.SocketHandler do
     {:push, encode_frame(%{type: "Pong", data: System.os_time()}, state.format), state}
   end
 
-  def handle_payload(%{"type" => "BeginTyping"} = _payload, state) do
-    {:push, encode_frame(%{test: "test"}, state.format), state}
+  def handle_payload(%{"type" => "BeginTyping", "channel" => channel_id} = _payload, state) do
+    GenServer.cast(state.linked_socket, {:event_begin_typing, channel_id})
+    {:ok, state}
   end
 
-  def handle_payload(%{"type" => "EndTyping"} = _payload, state) do
-    {:push, encode_frame(%{test: "test"}, state.format), state}
+  def handle_payload(%{"type" => "EndTyping", "channel" => _channel_id} = _payload, state) do
+    {:ok, state}
   end
 
   def handle_payload(_, state) do

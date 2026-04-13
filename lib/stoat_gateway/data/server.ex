@@ -7,4 +7,11 @@ defmodule Stoat.Server do
 
   def fetch_many(ids) when is_list(ids),
     do: Mongo.find(:mongo_db, "servers", %{_id: %{"$in": ids}}) |> Enum.to_list()
+
+  def fetch_by_channel_id(id) when is_binary(id) do
+    case Mongo.find_one(:mongo_db, "channels", %{_id: id}) do
+      %{"server" => server_id} -> server_id
+      _-> nil
+    end
+  end
 end
