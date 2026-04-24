@@ -3,8 +3,8 @@ defmodule StoatGateway.Server do
   require Logger
 
   defstruct id: nil,
-            # monitor_ref: {user_id, socket_pid}?
-            linked_sockets: []
+            data: %{},
+            linked_sessions: []
 
   def start_link(%{id: id}) do
     GenServer.start_link(__MODULE__, %__MODULE__{id: id},
@@ -27,9 +27,8 @@ defmodule StoatGateway.Server do
   end
 
   def init(state) do
-    # TODO: Add into state, fully define struct first
     server = Stoat.Server.fetch_by_id(state.id)
-    {:ok, state, {:continue, :get_state}}
+    {:ok, %{state | data: server}, {:continue, :get_state}}
   end
 
   def handle_continue(:get_state, state) do
@@ -42,7 +41,7 @@ defmodule StoatGateway.Server do
   def handle_cast({:link_session, user_id, session_pid}, state) do
     Logger.debug("server:#{inspect(self())} add session:#{user_id}:#{inspect(session_pid)}")
     Process.monitor(session_pid)
-    {:noreply, %{state | linked_sockets: state.linked_sockets ++ [{user_id, session_pid}]}}
+    {:noreply, %{state | linked_sessions: state.linked_sessions ++ [{user_id, session_pid}]}}
   end
 
   def handle_cast({:dispatch_begin_typing, channel_id, user_id}, state) do
@@ -54,8 +53,8 @@ defmodule StoatGateway.Server do
     {:noreply,
      %{
        state
-       | linked_sockets:
-           Enum.reject(state.linked_sockets, fn {u_id, session_pid} -> session_pid == pid end)
+       | linked_sessions:
+           Enum.reject(state.linked_sessions, fn {_, session_pid} -> session_pid == pid end)
      }}
   end
 end
