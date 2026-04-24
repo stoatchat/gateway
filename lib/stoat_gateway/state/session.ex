@@ -8,6 +8,8 @@ defmodule Stoat.State.Ready do
             members: [],
             emojis: [],
             voice_states: [],
+            user_settings: %{},
+            channel_unreads: [],
             policy_changes: []
 end
 
@@ -74,7 +76,7 @@ defmodule StoatGateway.Session do
 
     ready_payload = %Stoat.State.Ready{servers: servers, channels: channels}
     send(state.linked_socket, {:ready, ready_payload})
-    {:noreply, %{state | ready: true, linked_servers: server_pids}}
+    {:noreply, %{state | ready: true, linked_servers: server_pids, servers: servers}}
   end
 
   def handle_cast({:event_begin_typing, channel_id}, state) do
