@@ -53,12 +53,24 @@ end
 defmodule Stoat.Permissions do
   # TODO(twitch): unsure why but i'm just not happy with any of this lol
   # Essentially an impl of https://github.com/stoatchat/for-android/blob/dev/app/src/main/java/chat/stoat/api/internals/Roles.kt#L75
-  def filter_inaccessible_channels() do
+  def filter_inaccessible_channels(channels, servers, members) do
+    Enum.filter(channels, fn channel ->
+      server_id = Map.get(channel, "server")
+      server = Enum.find(servers, fn %{"_id" => id} -> id == server_id end)
+
+      member =
+        Enum.find(members, fn %{"_id" => %{"server" => server_id}} -> server_id == server_id end)
+
+      permissions_for_channel(channel, member, server)
+      |> has_permission?(Stoat.Permissions.Bits.view_channel())
+    end)
   end
 
+  def has_permission?(user_permissions, query), do: Bitwise.band(user_permissions, query) != 0
+
   def permissions_for_channel(
-        %{"role_permissions" => role_permissions} = channel,
-        %{"_id" => member_id} = member,
+        channel,
+        %{"_id" => %{"user" => member_id}} = member,
         server
       ) do
     case member_id == Map.get(server, "owner") do
@@ -68,15 +80,15 @@ defmodule Stoat.Permissions do
       _ ->
         calculated = permissions_for_member(member, server)
         default_permissisons = Map.get(channel, "default_permissions", default_permissions_map())
-        calculated = Bitwise.band(calculated, calculate_permissions(default_permissisons))
+        calculated = apply_channel_overwrites(calculated, default_permissisons)
 
-        role_overrides =
-          Enum.map(Map.get(member, "roles", []), fn role_id ->
-            role = Map.get(role_permissions, role_id, default_permissions_map())
-            calculate_permissions(role)
-          end)
+        role_permissions = Map.get(channel, "role_permissions", %{})
 
-        calculate_final_permissions(calculated, role_overrides)
+        Enum.reduce(Map.get(member, "roles", []), calculated, fn role_id, acc ->
+          role = Map.get(role_permissions, role_id, default_permissions_map())
+
+          Bitwise.bor(acc, calculate_permissions(role))
+        end)
     end
   end
 
@@ -84,21 +96,23 @@ defmodule Stoat.Permissions do
     default_permissions =
       Map.get(server, "default_permissions", Stoat.Permissions.Bits.server_default())
 
-    permissions =
-      Enum.map(Map.get(member, "roles", []), fn role_id ->
-        permissions =
-          Map.get(roles, role_id, %{}) |> Map.get("permissions", default_permissions_map())
+    Enum.reduce(Map.get(member, "roles", []), default_permissions, fn role_id, acc ->
+      permissions =
+        Map.get(roles, role_id, %{}) |> Map.get("permissions", default_permissions_map())
 
-        calculate_permissions(permissions)
-      end)
-
-    calculate_final_permissions(default_permissions, permissions)
+      Bitwise.bor(acc, calculate_permissions(permissions))
+    end)
   end
 
   defp calculate_final_permissions(default, roles) when length(roles) > 0,
-    do: Bitwise.bor(default, Enum.max(roles))
+    do: default || Enum.max(roles)
 
   defp calculate_final_permissions(default, []), do: default
+
+  defp apply_channel_overwrites(permissions, %{"a" => a, "d" => d}) do
+    Bitwise.band(permissions, Bitwise.bnot(d))
+    |> Bitwise.bor(a)
+  end
 
   defp calculate_permissions(%{"a" => a, "d" => d}), do: Bitwise.band(a, Bitwise.bnot(d))
   defp default_permissions_map(), do: %{"a" => 0, "d" => 0}
