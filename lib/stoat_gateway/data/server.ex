@@ -11,7 +11,7 @@ defmodule Stoat.Server do
   def fetch_by_channel_id(id) when is_binary(id) do
     case Mongo.find_one(:mongo_db, "channels", %{_id: id}) do
       %{"server" => server_id} -> server_id
-      _-> nil
+      _ -> nil
     end
   end
 end

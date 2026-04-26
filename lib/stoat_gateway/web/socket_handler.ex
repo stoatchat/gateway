@@ -25,7 +25,8 @@ defmodule StoatGateway.Web.SocketHandler do
           {StoatGateway.Session, %{data: data, socket: self(), type: type}}
         )
 
-      {:push, build_event(:Authenticated, format), %__MODULE__{ready: true, format: format, linked_socket: socket_pid}}
+      {:push, build_event(:Authenticated, format),
+       %__MODULE__{ready: true, format: format, linked_socket: socket_pid}}
     else
       _ ->
         {:stop, :normal, 1007, build_error("InvalidSession", format),

@@ -83,15 +83,26 @@ defmodule StoatGateway.Session do
 
     ready_payload = %Stoat.State.Ready{servers: servers, channels: channels, members: memberships}
     send(state.linked_socket, {:ready, ready_payload})
-    {:noreply, %{state | ready: true, linked_servers: server_pids, servers: servers, channels: channels, memberships: memberships}}
+
+    {:noreply,
+     %{
+       state
+       | ready: true,
+         linked_servers: server_pids,
+         servers: servers,
+         channels: channels,
+         memberships: memberships
+     }}
   end
 
   def handle_cast({:event_begin_typing, channel_id}, state) do
     # TODO: Use state to find this
     server_id = Stoat.Server.fetch_by_channel_id(channel_id)
+
     case Enum.find(state.linked_servers, fn {id, _} -> id == server_id end) do
       {_, pid} -> GenServer.cast(pid, {:dispatch_begin_typing, channel_id, state.user_id})
     end
+
     {:noreply, state}
   end
 
