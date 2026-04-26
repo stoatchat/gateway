@@ -26,6 +26,9 @@ defmodule StoatGateway.Session do
             type: :user,
             forwarding: true,
             servers: [],
+            channels: [],
+            memberships: [],
+            users: [],
             linked_servers: []
 
   @type t :: %__MODULE__{
@@ -36,6 +39,9 @@ defmodule StoatGateway.Session do
           type: atom(),
           forwarding: boolean(),
           servers: list(),
+          channels: list(),
+          memberships: list(),
+          users: list(),
           linked_servers: list()
         }
 
@@ -59,7 +65,8 @@ defmodule StoatGateway.Session do
   end
 
   def handle_continue(:ready, state) do
-    server_ids = Stoat.User.fetch_server_memberships(state.user_id)
+    memberships = Stoat.User.fetch_server_memberships(state.user_id)
+    server_ids = Stoat.User.server_ids_from_memberships(memberships)
 
     server_pids =
       Enum.map(server_ids, fn server_id ->
@@ -71,12 +78,12 @@ defmodule StoatGateway.Session do
     servers = Stoat.Server.fetch_many(server_ids)
 
     channel_ids = servers |> Enum.flat_map(& &1["channels"])
-    # TODO: calculate viewable channels with permissions
     channels = Mongo.find(:mongo_db, "channels", %{_id: %{"$in": channel_ids}}) |> Enum.to_list()
+    channels = Stoat.Permissions.filter_inaccessible_channels(channels, servers, memberships)
 
-    ready_payload = %Stoat.State.Ready{servers: servers, channels: channels}
+    ready_payload = %Stoat.State.Ready{servers: servers, channels: channels, members: memberships}
     send(state.linked_socket, {:ready, ready_payload})
-    {:noreply, %{state | ready: true, linked_servers: server_pids, servers: servers}}
+    {:noreply, %{state | ready: true, linked_servers: server_pids, servers: servers, channels: channels, memberships: memberships}}
   end
 
   def handle_cast({:event_begin_typing, channel_id}, state) do
