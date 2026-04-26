@@ -51,29 +51,55 @@ defmodule Stoat.Permissions.Bits do
 end
 
 defmodule Stoat.Permissions do
-  # TODO(twitch?):
-  # Recreate Calculating viewable channels based on permissions
-  # https://github.com/stoatchat/stoatchat/blob/main/crates/core/permissions/src/impl.rs#L81
-
+  # TODO(twitch): unsure why but i'm just not happy with any of this lol
+  # Essentially an impl of https://github.com/stoatchat/for-android/blob/dev/app/src/main/java/chat/stoat/api/internals/Roles.kt#L75
   def filter_inaccessible_channels() do
   end
 
-  # Impl of https://github.com/stoatchat/stoatchat/blob/main/crates/bonfire/src/events/impl.rs#L20
-  def permissions_for_channel(channel, %{"_id" => member_id} = member, server) do
+  def permissions_for_channel(
+        %{"role_permissions" => role_permissions} = channel,
+        %{"_id" => member_id} = member,
+        server
+      ) do
     case member_id == Map.get(server, "owner") do
       true ->
         Stoat.Permissions.Bits.max_safe()
 
       _ ->
-        calculated = calculate_member_permissions(member, server)
+        calculated = permissions_for_member(member, server)
+        default_permissisons = Map.get(channel, "default_permissions", default_permissions_map())
+        calculated = Bitwise.band(calculated, calculate_permissions(default_permissisons))
+
+        role_overrides =
+          Enum.map(Map.get(member, "roles", []), fn role_id ->
+            role = Map.get(role_permissions, role_id, default_permissions_map())
+            calculate_permissions(role)
+          end)
+
+        calculate_final_permissions(calculated, role_overrides)
     end
   end
 
-  defp calculate_member_permissions(member, server) do
-    calculated = Map.get(server, "default_permissions", Stoat.Permissions.Bits.server_default())
+  def permissions_for_member(member, %{"roles" => roles} = server) do
+    default_permissions =
+      Map.get(server, "default_permissions", Stoat.Permissions.Bits.server_default())
 
-    Enum.each(Map.get(member, "roles", []), fn role_id ->
-      nil
-    end)
+    permissions =
+      Enum.map(Map.get(member, "roles", []), fn role_id ->
+        permissions =
+          Map.get(roles, role_id, %{}) |> Map.get("permissions", default_permissions_map())
+
+        calculate_permissions(permissions)
+      end)
+
+    calculate_final_permissions(default_permissions, permissions)
   end
+
+  defp calculate_final_permissions(default, roles) when length(roles) > 0,
+    do: Bitwise.bor(default, Enum.max(roles))
+
+  defp calculate_final_permissions(default, []), do: default
+
+  defp calculate_permissions(%{"a" => a, "d" => d}), do: Bitwise.band(a, Bitwise.bnot(d))
+  defp default_permissions_map(), do: %{"a" => 0, "d" => 0}
 end
