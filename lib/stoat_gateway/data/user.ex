@@ -12,4 +12,20 @@ defmodule Stoat.User do
       member["_id"]["server"]
     end)
   end
+
+  def fetch_user_channels(user_id) do
+    Mongo.find(:mongo_db, "channels", %{
+      "$or": [
+        %{
+          recipients: user_id,
+          "$or": [
+            %{channel_type: "DirectMessage"},
+            %{channel_type: "Group"}
+          ]
+        },
+        %{channel_type: "SavedMessages", user: user_id}
+      ]
+    })
+    |> Enum.to_list()
+  end
 end

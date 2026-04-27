@@ -79,8 +79,15 @@ defmodule StoatGateway.Session do
     servers = Stoat.Server.fetch_many(server_ids)
 
     channel_ids = servers |> Enum.flat_map(& &1["channels"])
+    user_channels = Stoat.User.fetch_user_channels(state.user_id)
     channels = Mongo.find(:mongo_db, "channels", %{_id: %{"$in": channel_ids}}) |> Enum.to_list()
-    channels = Stoat.Permissions.filter_inaccessible_channels(channels, servers, memberships)
+    channels =
+      Stoat.Permissions.filter_inaccessible_channels(
+        channels ++ user_channels,
+        servers,
+        memberships,
+        state.user_id
+      )
 
     ready_payload = %Stoat.State.Ready{servers: servers, channels: channels, members: memberships}
     send(state.linked_socket, {:ready, ready_payload})

@@ -48,20 +48,35 @@ defmodule Stoat.Permissions.Bits do
   def server_default do
     default() + react() + change_nickname() + change_avatar()
   end
+
+  def saved_messages do
+    max_safe()
+  end
+
+  def direct_messages do
+    default() + manage_channel() + react()
+  end
 end
 
 defmodule Stoat.Permissions do
   # TODO(twitch): unsure why but i'm just not happy with any of this lol
   # Essentially an impl of https://github.com/stoatchat/for-android/blob/dev/app/src/main/java/chat/stoat/api/internals/Roles.kt#L75
-  def filter_inaccessible_channels(channels, servers, members) do
+  def filter_inaccessible_channels(channels, servers, members, user_id) do
     Enum.filter(channels, fn channel ->
-      server_id = Map.get(channel, "server")
-      server = Enum.find(servers, fn %{"_id" => id} -> id == server_id end)
+      case Map.get(channel, "server") do
+        nil ->
+          permissions_for_channel(channel, user_id)
 
-      member =
-        Enum.find(members, fn %{"_id" => %{"server" => server_id}} -> server_id == server_id end)
+        server_id ->
+          server = Enum.find(servers, fn %{"_id" => id} -> id == server_id end)
 
-      permissions_for_channel(channel, member, server)
+          member =
+            Enum.find(members, fn %{"_id" => %{"server" => server_id}} ->
+              server_id == server_id
+            end)
+
+          permissions_for_channel(channel, member, server)
+      end
       |> has_permission?(Stoat.Permissions.Bits.view_channel())
     end)
   end
@@ -69,6 +84,47 @@ defmodule Stoat.Permissions do
   def has_permission?(user_permissions, query), do: Bitwise.band(user_permissions, query) != 0
 
   def permissions_for_channel(
+        %{"channel_type" => "DirectMessage"} = _channel,
+        _
+      ) do
+    Stoat.Permissions.Bits.direct_messages()
+  end
+
+  def permissions_for_channel(
+        %{"channel_type" => "Group", "owner" => owner_id} = _channel,
+        member_id
+      ) do
+    if member_id == owner_id do
+      Stoat.Permissions.Bits.max_safe()
+    else
+      Stoat.Permissions.Bits.direct_messages()
+    end
+  end
+
+  def permissions_for_channel(
+        %{"channel_type" => "SavedMessages"} = _channel,
+        _
+      ) do
+    Stoat.Permissions.Bits.saved_messages()
+  end
+
+  def permissions_for_channel(
+        %{"channel_type" => "TextChannel"} = channel,
+        member,
+        server
+      ) do
+    permissions_for_guild_channel(channel, member, server)
+  end
+
+  def permissions_for_channel(
+        %{"channel_type" => "VoiceChannel"} = channel,
+        member,
+        server
+      ) do
+    permissions_for_guild_channel(channel, member, server)
+  end
+
+  def permissions_for_guild_channel(
         channel,
         %{"_id" => %{"user" => member_id}} = member,
         server
