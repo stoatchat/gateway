@@ -72,7 +72,8 @@ defmodule StoatGateway.Session do
       Enum.map(server_ids, fn server_id ->
         {:ok, pid} = StoatGateway.Server.lookup_or_start(server_id)
         GenServer.cast(pid, {:link_session, state.user_id, self()})
-        {server_id, pid}
+        ref = Process.monitor(pid)
+        {server_id, pid, ref}
       end)
 
     servers = Stoat.Server.fetch_many(server_ids)
@@ -99,7 +100,7 @@ defmodule StoatGateway.Session do
     # TODO: Use state to find this
     server_id = Stoat.Server.fetch_by_channel_id(channel_id)
 
-    case Enum.find(state.linked_servers, fn {id, _} -> id == server_id end) do
+    case Enum.find(state.linked_servers, fn {id, _, _} -> id == server_id end) do
       {_, pid} -> GenServer.cast(pid, {:dispatch_begin_typing, channel_id, state.user_id})
     end
 
