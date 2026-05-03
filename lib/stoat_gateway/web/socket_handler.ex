@@ -24,7 +24,7 @@ defmodule StoatGateway.Web.SocketHandler do
           Stoat.Sessions.Supervisor,
           {StoatGateway.Session, %{data: data, socket: self(), type: type}}
         )
-
+      Process.monitor(socket_pid)
       {:push, build_event(:Authenticated, format),
        %__MODULE__{ready: true, format: format, linked_socket: socket_pid}}
     else
@@ -71,6 +71,11 @@ defmodule StoatGateway.Web.SocketHandler do
   @impl true
   def handle_info({:ready, payload}, state) do
     {:push, encode_frame(payload, state.format), state}
+  end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, _}, state) do
+    {:stop, :shutdown, 1011, build_error("ServerError", state.format), state }
   end
 
   @impl true
