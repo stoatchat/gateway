@@ -28,4 +28,8 @@ defmodule Stoat.User do
     })
     |> Enum.to_list()
   end
+
+  def fetch_user_settings(user_id) do
+    Mongo.find_one(:mongo_db, "user_settings", %{_id: user_id})
+  end
 end

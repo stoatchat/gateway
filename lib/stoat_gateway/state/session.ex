@@ -92,11 +92,14 @@ defmodule StoatGateway.Session do
 
     emojis = Stoat.Server.find_emojis_by_many(server_ids)
 
+    user_settings = Stoat.User.fetch_user_settings(state.user_id)
+
     ready_payload = %Stoat.State.Ready{
       servers: servers,
       channels: channels,
       members: memberships,
-      emojis: emojis
+      emojis: emojis,
+      user_settings: user_settings
     }
 
     send(state.linked_socket, {:ready, ready_payload})
