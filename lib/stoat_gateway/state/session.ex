@@ -21,6 +21,7 @@ defmodule StoatGateway.Session do
 
   defstruct ready: false,
             user_id: nil,
+            data: %{},
             session: nil,
             linked_socket: nil,
             type: :user,
@@ -34,6 +35,7 @@ defmodule StoatGateway.Session do
   @type t :: %__MODULE__{
           ready: boolean(),
           user_id: String.t(),
+          data: map(),
           session: String.t(),
           linked_socket: pid(),
           type: atom(),
@@ -45,13 +47,14 @@ defmodule StoatGateway.Session do
           linked_servers: list()
         }
 
-  def start_link(%{socket: socket, data: %{"user_id" => id, "_id" => session} = _data}) do
+  def start_link(%{socket: socket, data: %{"user_id" => id, "_id" => session} = _data, type: type}) do
     GenServer.start_link(
       __MODULE__,
       %__MODULE__{
         user_id: id,
         linked_socket: socket,
-        session: session
+        session: session,
+        type: type
       }
     )
   end
@@ -65,12 +68,17 @@ defmodule StoatGateway.Session do
   end
 
   def handle_continue(:ready, state) do
+    user = Stoat.User.fetch_by_id(state.user_id)
+    state = %{state | data: user}
     memberships = Stoat.User.fetch_server_memberships(state.user_id)
     server_ids = Stoat.User.server_ids_from_memberships(memberships)
 
     server_pids =
       Enum.map(server_ids, fn server_id ->
         {:ok, pid} = StoatGateway.Server.lookup_or_start(server_id)
+        # TODO: change atom name to state its async
+        # we'll reduce DB calls and initially send server_ids as unavailable
+        # as servers are started the membership process will cause ServerAvailable events to get fired 
         GenServer.cast(pid, {:link_session, state.user_id, self()})
         ref = Process.monitor(pid)
         {server_id, pid, ref}
@@ -93,13 +101,27 @@ defmodule StoatGateway.Session do
     emojis = Stoat.Server.find_emojis_by_many(server_ids)
 
     user_settings = Stoat.User.fetch_user_settings(state.user_id)
+    channel_unreads = Stoat.User.fetch_unreads(state.user_id)
+
+    policy_changes = case state.type do
+      :bot -> []
+      :user -> 
+        last_acknowledge_time = Map.get(state.data, "last_acknowledged_policy_change", 0)
+        Stoat.User.fetch_policy_changes(last_acknowledge_time)
+    end
+   
+    user_ids = Map.get(state.data, "relations", []) 
+    users = [build_ready_user(state.data, "User") |  build_ready_relations_from_state(user_ids)]
 
     ready_payload = %Stoat.State.Ready{
       servers: servers,
       channels: channels,
       members: memberships,
       emojis: emojis,
-      user_settings: user_settings
+      user_settings: user_settings,
+      channel_unreads: channel_unreads,
+      policy_changes: policy_changes,
+      users: users
     }
 
     send(state.linked_socket, {:ready, ready_payload})
@@ -154,5 +176,28 @@ defmodule StoatGateway.Session do
         Logger.debug("session: terminating session #{inspect(self())} due to socket timeout")
         {:stop, :normal, state}
     end
+  end
+  
+  @spec build_ready_relations_from_state(map()) :: list(map())
+  defp build_ready_relations_from_state(relations) do
+    Enum.map(relations, fn %{"_id" => id, "status" => status} -> 
+      user = Stoat.User.fetch_by_id(id)
+      # TODO: Fetch presence from ETS before v2?
+      # Rearrange this flow in v2 to lazyload like server_session_link
+      # Until then: fire presence update on connect?
+      build_ready_user(user, status)
+    end)
+  end
+
+  defp build_ready_user(user, relationship_status) do
+    %Stoat.PublicUser{
+      relationship: relationship_status,
+      username: Map.get(user, "username"),
+      discriminator: Map.get(user, "discriminator"),
+      display_name: Map.get(user, "display_name"),
+      avatar: Map.get(user, "avatar", %{}),
+      badges: Map.get(user, "badges"),
+      online: false
+    }
   end
 end
