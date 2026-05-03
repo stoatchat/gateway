@@ -47,7 +47,11 @@ defmodule StoatGateway.Session do
           linked_servers: list()
         }
 
-  def start_link(%{socket: socket, data: %{"user_id" => id, "_id" => session} = _data, type: type}) do
+  def start_link(%{
+        socket: socket,
+        data: %{"user_id" => id, "_id" => session} = _data,
+        type: type
+      }) do
     GenServer.start_link(
       __MODULE__,
       %__MODULE__{
@@ -103,15 +107,18 @@ defmodule StoatGateway.Session do
     user_settings = Stoat.User.fetch_user_settings(state.user_id)
     channel_unreads = Stoat.User.fetch_unreads(state.user_id)
 
-    policy_changes = case state.type do
-      :bot -> []
-      :user -> 
-        last_acknowledge_time = Map.get(state.data, "last_acknowledged_policy_change", 0)
-        Stoat.User.fetch_policy_changes(last_acknowledge_time)
-    end
-   
-    user_ids = Map.get(state.data, "relations", []) 
-    users = [build_ready_user(state.data, "User") |  build_ready_relations_from_state(user_ids)]
+    policy_changes =
+      case state.type do
+        :bot ->
+          []
+
+        :user ->
+          last_acknowledge_time = Map.get(state.data, "last_acknowledged_policy_change", 0)
+          Stoat.User.fetch_policy_changes(last_acknowledge_time)
+      end
+
+    user_ids = Map.get(state.data, "relations", [])
+    users = [build_ready_user(state.data, "User") | build_ready_relations_from_state(user_ids)]
 
     ready_payload = %Stoat.State.Ready{
       servers: servers,
@@ -177,10 +184,10 @@ defmodule StoatGateway.Session do
         {:stop, :normal, state}
     end
   end
-  
+
   @spec build_ready_relations_from_state(map()) :: list(map())
   defp build_ready_relations_from_state(relations) do
-    Enum.map(relations, fn %{"_id" => id, "status" => status} -> 
+    Enum.map(relations, fn %{"_id" => id, "status" => status} ->
       user = Stoat.User.fetch_by_id(id)
       # TODO: Fetch presence from ETS before v2?
       # Rearrange this flow in v2 to lazyload like server_session_link

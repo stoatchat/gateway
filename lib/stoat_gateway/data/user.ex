@@ -2,17 +2,16 @@ defmodule Stoat.PublicUser do
   @derive Jason.Encoder
 
   defstruct _id: nil,
-    username: nil,
-    discriminator: nil,
-    display_name: nil,
-    avatar: %{},
-    badges: nil,
-    relationship: nil,
-    online: nil
+            username: nil,
+            discriminator: nil,
+            display_name: nil,
+            avatar: %{},
+            badges: nil,
+            relationship: nil,
+            online: nil
 end
 
 defmodule Stoat.User do
-
   def fetch_by_id(user_id) do
     Mongo.find_one(:mongo_db, "users", %{_id: user_id})
   end
@@ -56,6 +55,7 @@ defmodule Stoat.User do
   end
 
   def fetch_policy_changes(last_acknowledged) do
-    Mongo.find(:mongo_db, "policy_changes", %{"policy.created_time": %{gt: last_acknowledged}}) |> Enum.to_list()
+    Mongo.find(:mongo_db, "policy_changes", %{"policy.created_time": %{gt: last_acknowledged}})
+    |> Enum.to_list()
   end
 end
