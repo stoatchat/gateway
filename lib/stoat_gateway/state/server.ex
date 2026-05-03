@@ -54,9 +54,10 @@ defmodule StoatGateway.Server do
       bot: session_type,
       roles: Map.get(member_data, "roles", [])
     }
+
     {:noreply, %{state | linked_sessions: [session | state.linked_sessions]}}
   end
-  
+
   # TODO: probably want a general dispatch catch and then another func for specific topics
   # say channel, overall
   def handle_cast({:dispatch_begin_typing, channel_id, user_id}, state) do
@@ -65,7 +66,7 @@ defmodule StoatGateway.Server do
     {:noreply, state}
   end
 
-  def fanout(event, %{linked_sessions: sessions}=_state) do
+  def fanout(event, %{linked_sessions: sessions} = _state) do
     # TODO: just take an enum of sessions and higher level functions can filter as needed
     Enum.each(sessions, &send(&1.pid, {:socket_dispatch, event}))
   end
@@ -74,8 +75,7 @@ defmodule StoatGateway.Server do
     {:noreply,
      %{
        state
-       | linked_sessions:
-           Enum.reject(state.linked_sessions, fn session -> session.pid == pid end)
+       | linked_sessions: Enum.reject(state.linked_sessions, fn session -> session.pid == pid end)
      }}
   end
 end
