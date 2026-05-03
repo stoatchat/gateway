@@ -76,6 +76,11 @@ defmodule StoatGateway.Web.SocketHandler do
   end
 
   @impl true
+  def handle_info({:event_dispatch, event, body}, state) do
+    {:push, build_event(event, body, state.format), state}
+  end
+
+  @impl true
   def handle_info({:DOWN, _ref, :process, _pid, _}, state) do
     {:stop, :shutdown, 1011, build_error("ServerError", state.format), state}
   end

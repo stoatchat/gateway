@@ -4,6 +4,7 @@ defmodule StoatGateway.Server do
 
   defstruct id: nil,
             data: %{},
+            channels: [],
             linked_sessions: []
 
   def start_link(%{id: id}) do
@@ -38,15 +39,35 @@ defmodule StoatGateway.Server do
   def dispatch_event(id, event, data) do
   end
 
-  def handle_cast({:link_session, user_id, session_pid}, state) do
+  def handle_cast(
+        {:session_link_async, session_id, session_type, user_id, session_pid, member_data},
+        state
+      ) do
     Logger.debug("server:#{inspect(self())} add session:#{user_id}:#{inspect(session_pid)}")
-    Process.monitor(session_pid)
-    {:noreply, %{state | linked_sessions: state.linked_sessions ++ [{user_id, session_pid}]}}
-  end
+    ref = Process.monitor(session_pid)
 
+    session = %{
+      session_id: session_id,
+      user_id: user_id,
+      pid: session_pid,
+      monitor: ref,
+      bot: session_type,
+      roles: Map.get(member_data, "roles", [])
+    }
+    {:noreply, %{state | linked_sessions: [session | state.linked_sessions]}}
+  end
+  
+  # TODO: probably want a general dispatch catch and then another func for specific topics
+  # say channel, overall
   def handle_cast({:dispatch_begin_typing, channel_id, user_id}, state) do
+    fanout({:ChannelStartTyping, %{id: channel_id, user: user_id}}, state)
     Logger.debug("server:#{inspect(self())} dispatching typing by #{user_id} to #{channel_id}")
     {:noreply, state}
+  end
+
+  def fanout(event, %{linked_sessions: sessions}=_state) do
+    # TODO: just take an enum of sessions and higher level functions can filter as needed
+    Enum.each(sessions, &send(&1.pid, {:socket_dispatch, event}))
   end
 
   def handle_info({:DOWN, _ref, :process, pid, _}, state) do
@@ -54,7 +75,7 @@ defmodule StoatGateway.Server do
      %{
        state
        | linked_sessions:
-           Enum.reject(state.linked_sessions, fn {_, session_pid} -> session_pid == pid end)
+           Enum.reject(state.linked_sessions, fn session -> session.pid == pid end)
      }}
   end
 end

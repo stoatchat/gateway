@@ -14,7 +14,7 @@ defmodule Stoat.State.Ready do
 end
 
 defmodule StoatGateway.Session do
-  use GenServer, restart: :transient
+  use GenServer, restart: :temporary
   require Logger
   # Arbitrary 30s timeout to resume
   @socket_disconnect_timeout 30_000
@@ -80,10 +80,18 @@ defmodule StoatGateway.Session do
     server_pids =
       Enum.map(server_ids, fn server_id ->
         {:ok, pid} = StoatGateway.Server.lookup_or_start(server_id)
-        # TODO: change atom name to state its async
-        # we'll reduce DB calls and initially send server_ids as unavailable
+        # v2: we'll reduce DB calls and initially send server_ids as unavailable
         # as servers are started the membership process will cause ServerAvailable events to get fired 
-        GenServer.cast(pid, {:link_session, state.user_id, self()})
+        member =
+          Enum.find(memberships, fn %{"_id" => %{"server" => server_id}} ->
+            server_id == server_id
+          end)
+
+        GenServer.cast(
+          pid,
+          {:session_link_async, state.session, state.type, state.user_id, self(), member}
+        )
+
         ref = Process.monitor(pid)
         {server_id, pid, ref}
       end)
@@ -145,13 +153,27 @@ defmodule StoatGateway.Session do
   end
 
   def handle_cast({:event_begin_typing, channel_id}, state) do
-    # TODO: Use state to find this
-    server_id = Stoat.Server.fetch_by_channel_id(channel_id)
+    # Limit to channels we can view -> server will calculate final perms
+    # we can then move more state onto the server process and calculate it all there?
+    # benefit would be less state everywhere and the server can probably cache all of this
+    case Enum.find(state.channels, fn %{"_id" => id} -> id == channel_id end) do
+      %{"server" => server_id} ->
+        case Enum.find(state.linked_servers, fn {id, _, _} -> id == server_id end) do
+          {_, pid, _} -> GenServer.cast(pid, {:dispatch_begin_typing, channel_id, state.user_id})
+          _ -> nil
+        end
 
-    case Enum.find(state.linked_servers, fn {id, _, _} -> id == server_id end) do
-      {_, pid} -> GenServer.cast(pid, {:dispatch_begin_typing, channel_id, state.user_id})
+      # TODO: Process DMs
+      _ ->
+        nil
     end
 
+    {:noreply, state}
+  end
+
+  def handle_info({:socket_dispatch, {event, body}}, state) do
+    # TODO: Handle no socket here and holdon to events, upon max close session
+    send(state.linked_socket, {:event_dispatch, event, body})
     {:noreply, state}
   end
 
