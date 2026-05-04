@@ -229,4 +229,7 @@ defmodule StoatGateway.Session do
       online: false
     }
   end
+  
+  # Clean-up important state
+  def terminate(_reason, state), do: Registry.unregister(Stoat.Sessions, state.user_id)
 end
