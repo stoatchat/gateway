@@ -232,4 +232,6 @@ defmodule StoatGateway.Session do
   
   # Clean-up important state
   def terminate(_reason, state), do: Registry.unregister(Stoat.Sessions, state.user_id)
+  
+  def code_change(_old_vsn, state, _extra), do: {:ok, state}
 end
