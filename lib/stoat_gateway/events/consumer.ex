@@ -30,11 +30,32 @@ defmodule StoatGateway.Events.Consumer do
 
   defp process_message(%Broadway.Message{data: {:ok, data}} = message) do
     IO.inspect(message)
+    process_event(data)
     message
   end
 
   defp process_message(%Broadway.Message{data: {:error, reason}} = message) do
     IO.inspect(reason)
     message
+  end
+
+  # TODO: Determine nicest way, ideally we do map pattern matching once, easier readability
+  def process_event(%{"type" => event_type} = data) do
+    # TODO: wrap telemetry and otel context around this
+    # Can also add future pushnotif decisions here?
+    handle_event(event_type, data)
+  end
+
+  def handle_event("Message", %{"member" => %{"_id" => %{"server" => server_id}}} = payload) do
+    {:ok, server} = StoatGateway.Server.lookup_or_start(server_id)
+    StoatGateway.Server.dispatch(server, "Message", payload)
+  end
+
+  def handle_event("UserSettingsUpdate", %{"id" => user_id} = data) do
+    sessions = Registry.lookup(Stoat.Sessions, user_id)
+
+    Enum.each(sessions, fn {pid, _session_id} ->
+      send(pid, {:socket_dispatch, {:UserSettingsUpdate, data}})
+    end)
   end
 end

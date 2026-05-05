@@ -171,9 +171,9 @@ defmodule StoatGateway.Session do
     {:noreply, state}
   end
 
-  def handle_info({:socket_dispatch, {event, body}}, state) do
+  def handle_info({:socket_dispatch, {_event, body}}, state) do
     # TODO: Handle no socket here and holdon to events, upon max close session
-    send(state.linked_socket, {:event_dispatch, event, body})
+    send(state.linked_socket, {:event_dispatch_raw, body})
     {:noreply, state}
   end
 
@@ -229,9 +229,9 @@ defmodule StoatGateway.Session do
       online: false
     }
   end
-  
+
   # Clean-up important state
   def terminate(_reason, state), do: Registry.unregister(Stoat.Sessions, state.user_id)
-  
+
   def code_change(_old_vsn, state, _extra), do: {:ok, state}
 end

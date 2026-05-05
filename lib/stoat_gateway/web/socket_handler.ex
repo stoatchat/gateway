@@ -76,8 +76,8 @@ defmodule StoatGateway.Web.SocketHandler do
   end
 
   @impl true
-  def handle_info({:event_dispatch, event, body}, state) do
-    {:push, build_event(event, body, state.format), state}
+  def handle_info({:event_dispatch_raw, body}, state) do
+    {:push, encode_frame(body, state.format), state}
   end
 
   @impl true

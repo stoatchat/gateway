@@ -32,11 +32,12 @@ defmodule StoatGateway.Server do
     {:ok, %{state | data: server}, {:continue, :get_state}}
   end
 
-  def handle_continue(:get_state, state) do
-    {:noreply, state}
+  def dispatch(pid, event, data) do
+    GenServer.cast(pid, {:dispatch, event, data})
   end
 
-  def dispatch_event(id, event, data) do
+  def handle_continue(:get_state, state) do
+    {:noreply, state}
   end
 
   def handle_cast(
@@ -58,15 +59,24 @@ defmodule StoatGateway.Server do
     {:noreply, %{state | linked_sessions: [session | state.linked_sessions]}}
   end
 
+  def handle_cast({:dispatch, event, payload}, state) do
+    fanout({event, payload}, state.linked_sessions)
+    {:noreply, state}
+  end
+
   # TODO: probably want a general dispatch catch and then another func for specific topics
   # say channel, overall
   def handle_cast({:dispatch_begin_typing, channel_id, user_id}, state) do
-    fanout({:ChannelStartTyping, %{id: channel_id, user: user_id}}, state)
+    fanout(
+      {:ChannelStartTyping, %{type: "ChannelStartTyping", id: channel_id, user: user_id}},
+      state.linked_sessions
+    )
+
     Logger.debug("server:#{inspect(self())} dispatching typing by #{user_id} to #{channel_id}")
     {:noreply, state}
   end
 
-  def fanout(event, %{linked_sessions: sessions} = _state) do
+  def fanout(event, sessions) do
     # TODO: just take an enum of sessions and higher level functions can filter as needed
     Enum.each(sessions, &send(&1.pid, {:socket_dispatch, event}))
   end
