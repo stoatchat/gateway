@@ -1,5 +1,6 @@
 defmodule StoatGateway.Events.Consumer do
   use Broadway
+  import Logger
 
   def start_link(_) do
     Broadway.start_link(__MODULE__,
@@ -39,6 +40,21 @@ defmodule StoatGateway.Events.Consumer do
     message
   end
 
+  # NOTE: Big problem here is what data some events handle
+  # Biggest thing to figure out is presence and DMs
+  # Presence:
+  #   - Through API so there's handling there
+  #   - Could have a GenServer per user_id which deduplicates so only one status
+  #     - This GenServer then handles fanout (pubsub, through guilds, etc?)
+  #   - Needs to be deduplicated as much as possible
+  #   - In the future we can then remove this responsibility from Delta
+  # DMs:
+  #   - Same as a Server or just fetch recipients through Registry and let them handle it?
+  #     TODO: Check a DM `Message` Event to finalise this
+  #
+  # Generally figure out quirks of current setup
+  # Test relay is just `PSUBSCRIBE *` into RMQ queue
+
   # TODO: Determine nicest way, ideally we do map pattern matching once, easier readability
   def process_event(%{"type" => event_type} = data) do
     # TODO: wrap telemetry and otel context around this
@@ -50,12 +66,25 @@ defmodule StoatGateway.Events.Consumer do
     {:ok, server} = StoatGateway.Server.lookup_or_start(server_id)
     StoatGateway.Server.dispatch(server, "Message", payload)
   end
-
+  
+  # TODO: combine equal pattern match for fanout together
   def handle_event("UserSettingsUpdate", %{"id" => user_id} = data) do
+    session_fanout(user_id, {:UserSettingsUpdate, data})
+  end
+
+  def handle_event("UserRelationship", %{"id" => user_id} = data) do
+    session_fanout(user_id, {:UserRelationship, data})
+  end
+
+  def handle_event(event, payload) do
+    Logger.info("Unhandled event=#{event} payload=#{inspect(payload)}")
+  end
+
+  def session_fanout(user_id, payload) do
     sessions = Registry.lookup(Stoat.Sessions, user_id)
 
     Enum.each(sessions, fn {pid, _session_id} ->
-      send(pid, {:socket_dispatch, {:UserSettingsUpdate, data}})
+      send(pid, {:socket_dispatch, payload})
     end)
   end
 end
