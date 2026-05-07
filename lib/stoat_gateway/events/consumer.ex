@@ -63,8 +63,11 @@ defmodule StoatGateway.Events.Consumer do
   end
 
   def handle_event("Message", %{"member" => %{"_id" => %{"server" => server_id}}} = payload) do
-    {:ok, server} = StoatGateway.Server.lookup_or_start(server_id)
-    StoatGateway.Server.dispatch(server, "Message", payload)
+    server_fanout(server_id, {:Message, payload})
+  end
+
+  def handle_event("ChannelAck", %{"user" => user_id}=data) do
+    session_fanout(user_id, {:ChannelAck, data})
   end
   
   # TODO: combine equal pattern match for fanout together
@@ -78,6 +81,11 @@ defmodule StoatGateway.Events.Consumer do
 
   def handle_event(event, payload) do
     Logger.info("Unhandled event=#{event} payload=#{inspect(payload)}")
+  end
+
+  def server_fanout(server_id, {event, data}) do 
+    {:ok, server} = StoatGateway.Server.lookup_or_start(server_id)
+    StoatGateway.Server.dispatch(server, event, data)
   end
 
   def session_fanout(user_id, payload) do
