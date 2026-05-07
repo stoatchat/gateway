@@ -1,6 +1,6 @@
 defmodule StoatGateway.Events.Consumer do
   use Broadway
-  import Logger
+  require Logger
 
   def start_link(_) do
     Broadway.start_link(__MODULE__,
@@ -30,12 +30,12 @@ defmodule StoatGateway.Events.Consumer do
   end
 
   defp process_message(%Broadway.Message{data: {:ok, data}} = message) do
-    IO.inspect(message)
     process_event(data)
     message
   end
 
   defp process_message(%Broadway.Message{data: {:error, reason}} = message) do
+    Logger.error("Error Processing message error=#{reason}")
     IO.inspect(reason)
     message
   end
