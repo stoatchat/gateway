@@ -4,7 +4,6 @@ defmodule StoatGateway.Presence do
   Designed to be a "channel" agnostic routing layer for events which do not belong to a Server
   Essentially the level above a Session but called presence as it mostly handles this
   """
-  alias ElixirLS.LanguageServer.Providers.Implementation
   use GenServer, restart: :temporary
   require Logger
 
@@ -14,12 +13,12 @@ defmodule StoatGateway.Presence do
     current_presence: nil,
     current_status: %{}
   
-  # TODO: Implementation
+  # TODO: Impl
   def start_link(%{}) do
 
   end
   
-  # TODO: Implementation
+  # TODO: Impl
   def supervised_start() do
   end
 
