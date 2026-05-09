@@ -29,14 +29,17 @@ defmodule StoatGateway.Server do
 
   def init(state) do
     server = Stoat.Server.fetch_by_id(state.id)
-    {:ok, %{state | data: server}, {:continue, :get_state}}
+    {:ok, %{state | data: server}, {:continue, :ensure_init_state}}
   end
 
   def dispatch(pid, event, data) do
     GenServer.cast(pid, {:dispatch, event, data})
   end
 
-  def handle_continue(:get_state, state) do
+  def handle_continue(:ensure_init_state, state) do
+    # Hack until we can get server id in each server channel related event
+    channel_refs = build_channel_tuples(state)
+    :ets.insert(:channel_server_refs, channel_refs)
     {:noreply, state}
   end
 
@@ -87,5 +90,12 @@ defmodule StoatGateway.Server do
        state
        | linked_sessions: Enum.reject(state.linked_sessions, fn session -> session.pid == pid end)
      }}
+  end
+
+  defp build_channel_tuples(state) do
+    channels = Map.get(state.data, "channels")
+    Enum.map(channels, fn id -> 
+      {id, state.id}  
+    end)
   end
 end

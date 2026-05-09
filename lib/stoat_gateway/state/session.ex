@@ -24,6 +24,7 @@ defmodule StoatGateway.Session do
             data: %{},
             session: nil,
             linked_socket: nil,
+            linked_presence: nil,
             type: :user,
             forwarding: true,
             servers: [],
@@ -38,6 +39,7 @@ defmodule StoatGateway.Session do
           data: map(),
           session: String.t(),
           linked_socket: pid(),
+          linked_presence: pid(),
           type: atom(),
           forwarding: boolean(),
           servers: list(),
@@ -140,6 +142,7 @@ defmodule StoatGateway.Session do
     }
 
     send(state.linked_socket, {:ready, ready_payload})
+    GenServer.cast(self(), {:presence_init_link, filter_dm_channels(channels)})
 
     {:noreply,
      %{
@@ -150,6 +153,11 @@ defmodule StoatGateway.Session do
          channels: channels,
          memberships: memberships
      }}
+  end
+
+  def handle_cast({:presence_init_link, dm_channels}, state) do
+    Logger.debug("session=#{state.session} init presence link with channels #{inspect(dm_channels)}")
+    {:noreply, state}
   end
 
   def handle_cast({:event_begin_typing, channel_id}, state) do
@@ -163,7 +171,7 @@ defmodule StoatGateway.Session do
           _ -> nil
         end
 
-      # TODO: Process DMs
+      # TODO: We'll use Presence to fanout DM typing events
       _ ->
         nil
     end
@@ -228,6 +236,12 @@ defmodule StoatGateway.Session do
       badges: Map.get(user, "badges"),
       online: false
     }
+  end
+
+  defp filter_dm_channels(channels) do
+    Enum.filter(channels, fn %{"channel_type" => type} ->
+      type in ["DirectMessage", "Group", "SavedMessages"]
+    end)
   end
 
   # Clean-up important state

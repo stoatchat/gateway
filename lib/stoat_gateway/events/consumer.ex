@@ -40,59 +40,90 @@ defmodule StoatGateway.Events.Consumer do
     message
   end
 
-  # NOTE: Big problem here is what data some events handle
-  # Biggest thing to figure out is presence and DMs
-  # Presence:
-  #   - Through API so there's handling there
-  #   - Could have a GenServer per user_id which deduplicates so only one status
-  #     - This GenServer then handles fanout (pubsub, through guilds, etc?)
-  #   - Needs to be deduplicated as much as possible
-  #   - In the future we can then remove this responsibility from Delta
-  # DMs:
-  #   - Same as a Server or just fetch recipients through Registry and let them handle it?
-  #     TODO: Check a DM `Message` Event to finalise this
-  #
-  # Generally figure out quirks of current setup
+  # NOTE: Big problem here is what data some events provide
+  # Ideally:
+  # - We have channel type to reduce look ups
+  # - Channels in a server have a server_id key
   # Test relay is just `PSUBSCRIBE *` into RMQ queue
 
-  # TODO: Determine nicest way, ideally we do map pattern matching once, easier readability
   def process_event(%{"type" => event_type} = data) do
     # TODO: wrap telemetry and otel context around this
     # Can also add future pushnotif decisions here?
     handle_event(event_type, data)
   end
-
-  def handle_event("Message", %{"member" => %{"_id" => %{"server" => server_id}}} = payload) do
-    server_fanout(server_id, {:Message, payload})
-  end
-
-  def handle_event("ChannelAck", %{"user" => user_id}=data) do
-    session_fanout(user_id, {:ChannelAck, data})
+  
+  # Custom logic to pattern handle messages in servers & dm channels
+  def handle_event("Message", %{"member" => %{"_id" => %{"server" => server_id}}} = data) do
+    server_fanout(server_id, {:Message, data})
   end
   
-  # TODO: combine equal pattern match for fanout together
-  def handle_event("UserSettingsUpdate", %{"id" => user_id} = data) do
-    session_fanout(user_id, {:UserSettingsUpdate, data})
+  # Channel scoped events
+  def handle_event("MessageUpdate", data), do: handle_channel_event(:MessageUpdate, data)
+  def handle_event("MessageAppend", data), do: handle_channel_event(:MessageAppend, data)
+  def handle_event("MessageDelete", data), do: handle_channel_event(:MessageDelete, data)
+  def handle_event("MessageReact", data), do: handle_channel_event(:MessageReact, data)
+  def handle_event("MessageUnreact", data), do: handle_channel_event(:MessageUnreact, data)
+  def handle_event("MessageRemoveReaction", data), do: handle_channel_event(:MessageRemoveReaction, data)
+  def handle_event("BulkMessageDelete", data), do: handle_channel_event(:BulkMessageDelete, data)
+  
+  # Server scoped events
+  def handle_event("ServerCreate", data) do
+    # TODO: Start GenServer + Link with Owner Sessions
   end
 
-  def handle_event("UserRelationship", %{"id" => user_id} = data) do
-    session_fanout(user_id, {:UserRelationship, data})
+  def handle_event("ServerUpdate", data), do: handle_server_event(:ServerUpdate, data) 
+  def handle_event("ServerDelete", data), do: handle_server_event(:ServerDelete, data)
+  def handle_event("ServerMemberUpdate", data), do: handle_server_event(:ServerMemberUpdate, data)
+  def handle_event("ServerMemberJoin", data), do: handle_server_event(:ServerMemberJoin, data)
+  def handle_event("ServerMemberLeave", data), do: handle_server_event(:ServerMemberLeave, data)
+  def handle_event("ServerRoleUpdate", data), do: handle_server_event(:ServerRoleUpdate, data)
+  def handle_event("ServerRoleDelete", data), do: handle_server_event(:ServerRoleDelete, data)
+  def handle_event("ServerRoleRanksUpdate", data), do: handle_server_event(:ServerRoleRanksUpdate, data)
+
+  # User scoped events
+  #   Presence Events
+
+  def handle_event("ChannelAck", data), do: handle_user_event(:ChannelAck, data)
+
+  def handle_event("UserUpdate", data), do: handle_presence_event(:UserUpdate, data)
+  def handle_event("UserSettingsUpdate", data), do: handle_user_event(:UserSettingsUpdate, data) 
+  def handle_event("UserRelationship", data), do: handle_user_event(:UserRelationship, data)
+  def handle_event("UserPlatformWipe", data), do: nil
+
+  def handle_event(event, data) do
+    Logger.info("Unhandled event=#{event} payload=#{inspect(data)}")
   end
 
-  def handle_event(event, payload) do
-    Logger.info("Unhandled event=#{event} payload=#{inspect(payload)}")
+  defp handle_channel_event(event, %{"channel" => channel_id}) do
+    # TODO: Check against server mapping or push out to gdm subscriptions
+    # both ets tables so might slow things down
+    # in future we can move away from the redis pubsub baked architecture and include more in the event from delta
   end
 
-  def server_fanout(server_id, {event, data}) do 
+  defp handle_presence_event(event, %{"id" => user_id} = _data) do
+    # TODO: Find presence in registry and cast :dispatch
+  end
+  
+  defp handle_server_event(event, %{"id" => server_id} = data) do
+    server_fanout(server_id, {event, data})
+  end
+
+  defp handle_user_event(event, %{"id" => user_id} = data) do
+    Logger.debug("Pushing user event to sessions")
+    session_fanout(user_id, {event, data})
+  end
+
+  defp server_fanout(server_id, {event, data}) do 
     {:ok, server} = StoatGateway.Server.lookup_or_start(server_id)
     StoatGateway.Server.dispatch(server, event, data)
   end
 
-  def session_fanout(user_id, payload) do
+  defp session_fanout(user_id, data) do
     sessions = Registry.lookup(Stoat.Sessions, user_id)
 
-    Enum.each(sessions, fn {pid, _session_id} ->
-      send(pid, {:socket_dispatch, payload})
+    Enum.each(sessions, fn {pid, session_id} ->
+      Logger.debug("fanning out to session #{inspect(pid)} id #{session_id}")
+      send(pid, {:socket_dispatch, data})
     end)
   end
 end
