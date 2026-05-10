@@ -4,22 +4,30 @@ defmodule StoatGateway.Presence do
   Designed to be a "channel" agnostic routing layer for events which do not belong to a Server
   Essentially the level above a Session but called presence as it mostly handles this
   """
-  use GenServer, restart: :temporary
+  use GenServer, restart: :transient 
   require Logger
 
   defstruct user_id: nil,
     dm_channels: [],
+    relationships: [],
     sessions: [],
     current_presence: nil,
-    current_status: %{}
+    current_status: %{},
+    subscriptions: []
   
-  # TODO: Impl
-  def start_link(%{}) do
-
+  def start_link(%{user_id: user_id} = state) do
+    GenServer.start_link(__MODULE__, state,
+      name: {:via, Registry, {Stoat.Presence, user_id}}
+    )
   end
   
-  # TODO: Impl
-  def supervised_start() do
+  def supervised_start(id, dm_channels, relationships) do
+    state = %__MODULE__{
+      user_id: id,
+      dm_channels: dm_channels,
+      relationships: relationships
+    } 
+    DynamicSupervisor.start_child(Stoat.Servers.Supervisor, {StoatGateway.Presence, state})
   end
 
   @spec lookup(binary()) :: {:ok, pid()} | {:error, atom()}
