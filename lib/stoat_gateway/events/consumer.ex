@@ -118,8 +118,11 @@ defmodule StoatGateway.Events.Consumer do
     end)
   end
 
-  defp handle_presence_event(event, %{"id" => user_id} = _data) do
-    # TODO: Find presence in registry and cast :dispatch
+  defp handle_presence_event(event, %{"id" => user_id} = data) do
+    case StoatGateway.Presence.lookup(user_id) do
+      {:ok, pid} -> send(pid, {:presence_user_update, {event, data}})
+      _ -> nil
+    end
   end
   
   defp handle_server_event(event, %{"id" => server_id} = data) do
