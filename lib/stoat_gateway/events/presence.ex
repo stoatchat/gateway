@@ -42,15 +42,20 @@ defmodule StoatGateway.Presence do
   end
 
   def init(state) do
-    {:ok, state}
+    {:ok, state, {:continue, :ensure_init}}
   end
 
-  def handle_cast({:session_link_async, session_id, type, user_id, pid}, state) do
+  def handle_continue(:ensure_init, state) do
+    ensure_gdm_subscriptions(state.dm_channels)
+    ensure_friend_subscriptions(state.relationships)
+    {:noreply, state}
+  end
+
+  def handle_cast({:session_link_async, session_id, type, pid}, state) do
     ref = Process.monitor(pid)
 
     session = %{
       session_id: session_id,
-      user_id: user_id,
       pid: pid,
       monitor: ref,
       type: type,
@@ -59,6 +64,27 @@ defmodule StoatGateway.Presence do
     {:noreply, %{state | sessions: [session | state.sessions]}}
   end
 
-  def ensure_gdm_subscriptions(state) do
+  def handle_cast({:presence_link_friend, user_id, pid}, state) do
+    {:noreply, state}
   end
+
+  def handle_call({:update_gdm_channels, gdm_channels, session_id}, state) do
+  end
+
+  def handle_info({:dm_event_dispatch, payload}, state) do
+    Enum.each(state.sessions, &send(&1.pid, {:socket_dispatch, payload}))
+    {:noreply, state}
+  end
+
+  defp ensure_gdm_subscriptions(channels) do
+    subscriptions = Enum.map(channels, fn %{"_id" => channel} ->
+      {channel, self()}  
+    end)
+    true = :ets.insert(:gdm_subscriptions, subscriptions)
+  end
+
+  defp ensure_friend_subscriptions(relationships) do
+  end
+
+  def code_change(_old_vsn, state, _extra), do: {:ok, state}
 end

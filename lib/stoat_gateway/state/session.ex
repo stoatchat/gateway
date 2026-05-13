@@ -157,7 +157,16 @@ defmodule StoatGateway.Session do
 
   def handle_cast({:presence_init_link, dm_channels}, state) do
     Logger.debug("session=#{state.session} init presence link with channels #{inspect(dm_channels)}")
-    {:noreply, state}
+    relationships = Map.get(state.data, "relations")
+    presence_pid = case StoatGateway.Presence.lookup(state.user_id) do
+      {:ok, pid} -> pid
+      _ -> 
+      {:ok, pid} = StoatGateway.Presence.supervised_start(state.user_id, dm_channels, relationships)
+      pid
+    end
+    Process.monitor(presence_pid)
+    GenServer.cast(presence_pid, {:session_link_async, state.session, state.type, self()})
+    {:noreply, %{state | linked_presence: presence_pid}}
   end
 
   def handle_cast({:event_begin_typing, channel_id}, state) do

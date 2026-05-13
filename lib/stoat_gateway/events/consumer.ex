@@ -56,6 +56,10 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("Message", %{"member" => %{"_id" => %{"server" => server_id}}} = data) do
     server_fanout(server_id, {:Message, data})
   end
+
+  def handle_event("Message", %{"channel" => channel_id} = data) do
+    handle_dm_event(:Message, channel_id, data)
+  end
   
   # Channel scoped events
   def handle_event("MessageUpdate", data), do: handle_channel_event(:MessageUpdate, data)
@@ -91,13 +95,27 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("UserPlatformWipe", data), do: nil
 
   def handle_event(event, data) do
-    Logger.info("Unhandled event=#{event} payload=#{inspect(data)}")
+    Logger.info("Unhandled event=#{event} data=#{inspect(data)}")
   end
 
-  defp handle_channel_event(event, %{"channel" => channel_id}) do
-    # TODO: Check against server mapping or push out to gdm subscriptions
-    # both ets tables so might slow things down
+  def parse_channel_id(%{"channel" => channel_id}), do: channel_id
+  def parse_channel_id(%{"channel_id" => channel_id}), do: channel_id
+
+  defp handle_channel_event(event, data) do
+    channel_id = parse_channel_id(data)
+    # NOTE: Both ets tables so might slow things down
     # in future we can move away from the redis pubsub baked architecture and include more in the event from delta
+    case :ets.lookup(:channel_server_refs, channel_id) do
+      [{_, server_id}] -> server_fanout(server_id, {event, data}) 
+      _ -> handle_dm_event(event, channel_id, data)
+    end
+  end
+
+  def handle_dm_event(event, channel_id, data) do
+    subscriptions = :ets.lookup(:gdm_subscriptions, channel_id)
+    Enum.each(subscriptions, fn {_, pid} -> 
+      send(pid, {:dm_event_dispatch, {event, data}})
+    end)
   end
 
   defp handle_presence_event(event, %{"id" => user_id} = _data) do
@@ -109,7 +127,7 @@ defmodule StoatGateway.Events.Consumer do
   end
 
   defp handle_user_event(event, %{"id" => user_id} = data) do
-    Logger.debug("Pushing user event to sessions")
+    Logger.debug("session fanout: event=#{inspect(event)}")
     session_fanout(user_id, {event, data})
   end
 
