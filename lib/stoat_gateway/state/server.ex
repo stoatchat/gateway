@@ -58,7 +58,7 @@ defmodule StoatGateway.Server do
       bot: session_type,
       roles: Map.get(member_data, "roles", [])
     }
-    
+
     if not user_session_exists?(session, state.linked_sessions) do
       :pg.join(:presence, user_id, self())
     end
@@ -70,7 +70,7 @@ defmodule StoatGateway.Server do
     fanout({event, payload}, state.linked_sessions)
     {:noreply, state}
   end
-  
+
   # TODO: probably want a general dispatch catch and then another func for specific topics
   # say channel, overall
   def handle_cast({:dispatch_begin_typing, channel_id, user_id}, state) do
@@ -89,22 +89,25 @@ defmodule StoatGateway.Server do
   end
 
   def handle_info({:DOWN, _ref, :process, pid, _}, state) do
-    user = Enum.find(state.linked_sessions, %{}, fn session -> 
-      session.pid == pid
-    end)
+    user =
+      Enum.find(state.linked_sessions, %{}, fn session ->
+        session.pid == pid
+      end)
 
-    new_sessions = Enum.reject(state.linked_sessions, fn session -> 
-         session.pid == pid 
-       end)
-    
+    new_sessions =
+      Enum.reject(state.linked_sessions, fn session ->
+        session.pid == pid
+      end)
+
     if not user_session_exists?(user, new_sessions) do
-     :pg.leave(:presence, user.id) 
+      :pg.leave(:presence, user.id)
     end
-    
+
     {:noreply,
      %{
        state
-       | linked_sessions: new_sessions}}
+       | linked_sessions: new_sessions
+     }}
   end
 
   def fanout(event, sessions) do
