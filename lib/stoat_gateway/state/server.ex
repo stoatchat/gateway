@@ -58,6 +58,10 @@ defmodule StoatGateway.Server do
       bot: session_type,
       roles: Map.get(member_data, "roles", [])
     }
+    
+    if not user_session_exists?(session, state.linked_sessions) do
+      :pg.join(:presence, user_id, self())
+    end
 
     {:noreply, %{state | linked_sessions: [session | state.linked_sessions]}}
   end
@@ -66,7 +70,7 @@ defmodule StoatGateway.Server do
     fanout({event, payload}, state.linked_sessions)
     {:noreply, state}
   end
-
+  
   # TODO: probably want a general dispatch catch and then another func for specific topics
   # say channel, overall
   def handle_cast({:dispatch_begin_typing, channel_id, user_id}, state) do
@@ -79,17 +83,37 @@ defmodule StoatGateway.Server do
     {:noreply, state}
   end
 
+  def handle_info({:presence_update, payload}, state) do
+    fanout(payload, state.linked_sessions)
+    {:noreply, state}
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, _}, state) do
+    user = Enum.find(state.linked_sessions, %{}, fn session -> 
+      session.pid == pid
+    end)
+
+    new_sessions = Enum.reject(state.linked_sessions, fn session -> 
+         session.pid == pid 
+       end)
+    
+    if not user_session_exists?(user, new_sessions) do
+     :pg.leave(:presence, user.id) 
+    end
+    
+    {:noreply,
+     %{
+       state
+       | linked_sessions: new_sessions}}
+  end
+
   def fanout(event, sessions) do
     # TODO: just take an enum of sessions and higher level functions can filter as needed
     Enum.each(sessions, &send(&1.pid, {:socket_dispatch, event}))
   end
 
-  def handle_info({:DOWN, _ref, :process, pid, _}, state) do
-    {:noreply,
-     %{
-       state
-       | linked_sessions: Enum.reject(state.linked_sessions, fn session -> session.pid == pid end)
-     }}
+  defp user_session_exists?(user, sessions) do
+    Enum.any?(sessions, fn session -> session.user_id == user.user_id end)
   end
 
   defp build_channel_tuples(state) do
