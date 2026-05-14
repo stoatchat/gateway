@@ -71,7 +71,7 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("BulkMessageDelete", data), do: handle_channel_event(:BulkMessageDelete, data)
   
   # Server scoped events
-  def handle_event("ServerCreate", data) do
+  def handle_event("ServerCreate", _data) do
     # TODO: Start GenServer + Link with Owner Sessions
   end
 
@@ -87,12 +87,12 @@ defmodule StoatGateway.Events.Consumer do
   # User scoped events
   #   Presence Events
 
-  def handle_event("ChannelAck", data), do: handle_user_event(:ChannelAck, data)
+  def handle_event("ChannelAck", data), do: handle_presence_event(:ChannelAck, data)
 
   def handle_event("UserUpdate", data), do: handle_presence_event(:UserUpdate, data)
-  def handle_event("UserSettingsUpdate", data), do: handle_user_event(:UserSettingsUpdate, data) 
-  def handle_event("UserRelationship", data), do: handle_user_event(:UserRelationship, data)
-  def handle_event("UserPlatformWipe", data), do: nil
+  def handle_event("UserSettingsUpdate", data), do: handle_presence_event(:UserSettingsUpdate, data) 
+  def handle_event("UserRelationship", data), do: handle_presence_event(:UserRelationship, data)
+  def handle_event("UserPlatformWipe", _data), do: nil
 
   def handle_event(event, data) do
     Logger.info("Unhandled event=#{event} data=#{inspect(data)}")
@@ -120,7 +120,7 @@ defmodule StoatGateway.Events.Consumer do
 
   defp handle_presence_event(event, %{"id" => user_id} = data) do
     case StoatGateway.Presence.lookup(user_id) do
-      {:ok, pid} -> send(pid, {:presence_user_update, {event, data}})
+      {:ok, pid} -> send(pid, {:presence_event_dispatch, {event, data}})
       _ -> nil
     end
   end
@@ -129,22 +129,8 @@ defmodule StoatGateway.Events.Consumer do
     server_fanout(server_id, {event, data})
   end
 
-  defp handle_user_event(event, %{"id" => user_id} = data) do
-    Logger.debug("session fanout: event=#{inspect(event)}")
-    session_fanout(user_id, {event, data})
-  end
-
   defp server_fanout(server_id, {event, data}) do 
     {:ok, server} = StoatGateway.Server.lookup_or_start(server_id)
     StoatGateway.Server.dispatch(server, event, data)
-  end
-
-  defp session_fanout(user_id, data) do
-    sessions = Registry.lookup(Stoat.Sessions, user_id)
-
-    Enum.each(sessions, fn {pid, session_id} ->
-      Logger.debug("fanning out to session #{inspect(pid)} id #{session_id}")
-      send(pid, {:socket_dispatch, data})
-    end)
   end
 end

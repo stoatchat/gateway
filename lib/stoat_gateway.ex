@@ -9,6 +9,7 @@ defmodule StoatGateway do
     :ets.new(:channel_server_refs, [:named_table, :set, :public])
 
     children = [
+      %{id: :pg, start: {:pg, :start_link, [:presence]}},
       {Registry, keys: :unique, name: Stoat.Servers},
       {Registry, keys: :duplicate, name: Stoat.Sessions},
       {Registry, keys: :unique, name: Stoat.Presence},

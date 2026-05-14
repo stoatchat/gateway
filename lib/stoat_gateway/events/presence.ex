@@ -13,7 +13,6 @@ defmodule StoatGateway.Presence do
     sessions: [],
     current_presence: nil,
     current_status: %{},
-    subscribers: [],
     last_event_id: 0
   
   def start_link(%{user_id: user_id} = state) do
@@ -48,7 +47,7 @@ defmodule StoatGateway.Presence do
 
   def handle_continue(:ensure_init, state) do
     ensure_gdm_subscriptions(state.dm_channels)
-    ensure_friend_subscriptions(state.relationships, state.user_id)
+    ensure_friend_subscriptions(state.relationships)
     {:noreply, state}
   end
 
@@ -66,29 +65,43 @@ defmodule StoatGateway.Presence do
     {:noreply, %{state | sessions: [session | state.sessions]}}
   end
 
-  def handle_cast({:presence_link_friend, user_id, pid}, state) do
-    {:noreply, %{state | subscribers: [{user_id, pid} | state.subscribers]}}
-  end
-
-  def handle_call({:update_gdm_channels, gdm_channels, session_id}, state) do
+  def handle_call({:update_gdm_channels, _gdm_channels, _session_id}, state) do
+    {:ok, state}
   end
 
   def handle_info({:dm_event_dispatch, payload}, state) do
-    Enum.each(state.sessions, &send(&1.pid, {:socket_dispatch, payload}))
+    session_dispatch(payload, state)
     {:noreply, state}
   end
 
-  def handle_info({:presence_user_update, {:UserUpdate, data} = payload}, state) do
+  def handle_info({:presence_event_dispatch, {:UserUpdate, data} = payload}, state) do
     event_id = Map.get(data, "event_id")
     if event_id == state.last_event_id do
       {:noreply, state}
     else
+      subscribers = :pg.get_members(:presence, state.user_id)
+      Enum.each(subscribers, &send(&1, {:presence_update, payload}))
+      session_dispatch(payload, state)
       {:noreply, %{state | last_event_id: event_id}}
     end 
   end
 
-  def handle_info({:presence_user_update, payload}, state) do
+  def handle_info({:presence_event_dispatch, payload}, state) do
+    session_dispatch(payload, state)
     {:noreply, state}
+  end
+
+  def handle_info({:presence_update, payload}, state) do
+    session_dispatch(payload, state)
+    {:noreply, state}
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, _}, state) do
+    new_sessions = Enum.reject(state.sessions, fn %{monitor: mref} -> mref == ref end)
+    case new_sessions do
+      [] -> {:stop, :normal, state}
+      _ -> {:noreply, %{state | sessions: new_sessions}}
+    end
   end
 
   defp ensure_gdm_subscriptions(channels) do
@@ -98,17 +111,17 @@ defmodule StoatGateway.Presence do
     true = :ets.insert(:gdm_subscriptions, subscriptions)
   end
 
-  defp ensure_friend_subscriptions(relationships, user_id) do
+  defp ensure_friend_subscriptions(relationships) do
     Enum.each(relationships, fn %{"_id" => friend_id, "status" => status} -> 
       case status do
-        "Friend" ->  
-          case StoatGateway.Presence.lookup(friend_id) do
-            {:ok, pid} -> GenServer.cast(pid, {:presence_link_friend, user_id, self()})
-            _ -> nil
-          end
+        "Friend" -> :pg.join(:presence, friend_id, self())
         _ -> nil
       end 
     end)
+  end
+
+  defp session_dispatch(payload, state) do 
+    Enum.each(state.sessions, &send(&1.pid, {:socket_dispatch, payload}))
   end
 
   def code_change(_old_vsn, state, _extra), do: {:ok, state}
