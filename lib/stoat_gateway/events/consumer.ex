@@ -51,7 +51,7 @@ defmodule StoatGateway.Events.Consumer do
     # Can also add future pushnotif decisions here?
     handle_event(event_type, data)
   end
-  
+
   # Custom logic to pattern handle messages in servers & dm channels
   def handle_event("Message", %{"member" => %{"_id" => %{"server" => server_id}}} = data) do
     server_fanout(server_id, {:Message, data})
@@ -60,29 +60,34 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("Message", %{"channel" => channel_id} = data) do
     handle_dm_event(:Message, channel_id, data)
   end
-  
+
   # Channel scoped events
   def handle_event("MessageUpdate", data), do: handle_channel_event(:MessageUpdate, data)
   def handle_event("MessageAppend", data), do: handle_channel_event(:MessageAppend, data)
   def handle_event("MessageDelete", data), do: handle_channel_event(:MessageDelete, data)
   def handle_event("MessageReact", data), do: handle_channel_event(:MessageReact, data)
   def handle_event("MessageUnreact", data), do: handle_channel_event(:MessageUnreact, data)
-  def handle_event("MessageRemoveReaction", data), do: handle_channel_event(:MessageRemoveReaction, data)
+
+  def handle_event("MessageRemoveReaction", data),
+    do: handle_channel_event(:MessageRemoveReaction, data)
+
   def handle_event("BulkMessageDelete", data), do: handle_channel_event(:BulkMessageDelete, data)
-  
+
   # Server scoped events
   def handle_event("ServerCreate", _data) do
     # TODO: Start GenServer + Link with Owner Sessions
   end
 
-  def handle_event("ServerUpdate", data), do: handle_server_event(:ServerUpdate, data) 
+  def handle_event("ServerUpdate", data), do: handle_server_event(:ServerUpdate, data)
   def handle_event("ServerDelete", data), do: handle_server_event(:ServerDelete, data)
   def handle_event("ServerMemberUpdate", data), do: handle_server_event(:ServerMemberUpdate, data)
   def handle_event("ServerMemberJoin", data), do: handle_server_event(:ServerMemberJoin, data)
   def handle_event("ServerMemberLeave", data), do: handle_server_event(:ServerMemberLeave, data)
   def handle_event("ServerRoleUpdate", data), do: handle_server_event(:ServerRoleUpdate, data)
   def handle_event("ServerRoleDelete", data), do: handle_server_event(:ServerRoleDelete, data)
-  def handle_event("ServerRoleRanksUpdate", data), do: handle_server_event(:ServerRoleRanksUpdate, data)
+
+  def handle_event("ServerRoleRanksUpdate", data),
+    do: handle_server_event(:ServerRoleRanksUpdate, data)
 
   # User scoped events
   #   Presence Events
@@ -90,7 +95,10 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("ChannelAck", data), do: handle_presence_event(:ChannelAck, data)
 
   def handle_event("UserUpdate", data), do: handle_presence_event(:UserUpdate, data)
-  def handle_event("UserSettingsUpdate", data), do: handle_presence_event(:UserSettingsUpdate, data) 
+
+  def handle_event("UserSettingsUpdate", data),
+    do: handle_presence_event(:UserSettingsUpdate, data)
+
   def handle_event("UserRelationship", data), do: handle_presence_event(:UserRelationship, data)
   def handle_event("UserPlatformWipe", _data), do: nil
 
@@ -106,14 +114,15 @@ defmodule StoatGateway.Events.Consumer do
     # NOTE: Both ets tables so might slow things down
     # in future we can move away from the redis pubsub baked architecture and include more in the event from delta
     case :ets.lookup(:channel_server_refs, channel_id) do
-      [{_, server_id}] -> server_fanout(server_id, {event, data}) 
+      [{_, server_id}] -> server_fanout(server_id, {event, data})
       _ -> handle_dm_event(event, channel_id, data)
     end
   end
 
   def handle_dm_event(event, channel_id, data) do
     subscriptions = :ets.lookup(:gdm_subscriptions, channel_id)
-    Enum.each(subscriptions, fn {_, pid} -> 
+
+    Enum.each(subscriptions, fn {_, pid} ->
       send(pid, {:dm_event_dispatch, {event, data}})
     end)
   end
@@ -124,12 +133,12 @@ defmodule StoatGateway.Events.Consumer do
       _ -> nil
     end
   end
-  
+
   defp handle_server_event(event, %{"id" => server_id} = data) do
     server_fanout(server_id, {event, data})
   end
 
-  defp server_fanout(server_id, {event, data}) do 
+  defp server_fanout(server_id, {event, data}) do
     {:ok, server} = StoatGateway.Server.lookup_or_start(server_id)
     StoatGateway.Server.dispatch(server, event, data)
   end

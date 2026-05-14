@@ -94,8 +94,9 @@ defmodule StoatGateway.Server do
 
   defp build_channel_tuples(state) do
     channels = Map.get(state.data, "channels")
-    Enum.map(channels, fn id -> 
-      {id, state.id}  
+
+    Enum.map(channels, fn id ->
+      {id, state.id}
     end)
   end
 end

@@ -4,29 +4,28 @@ defmodule StoatGateway.Presence do
   Designed to be a "channel" agnostic routing layer for events which do not belong to a Server
   Essentially the level above a Session but called presence as it mostly handles this
   """
-  use GenServer, restart: :transient 
+  use GenServer, restart: :transient
   require Logger
 
   defstruct user_id: nil,
-    dm_channels: [],
-    relationships: [],
-    sessions: [],
-    current_presence: nil,
-    current_status: %{},
-    last_event_id: 0
-  
+            dm_channels: [],
+            relationships: [],
+            sessions: [],
+            current_presence: nil,
+            current_status: %{},
+            last_event_id: 0
+
   def start_link(%{user_id: user_id} = state) do
-    GenServer.start_link(__MODULE__, state,
-      name: {:via, Registry, {Stoat.Presence, user_id}}
-    )
+    GenServer.start_link(__MODULE__, state, name: {:via, Registry, {Stoat.Presence, user_id}})
   end
-  
+
   def supervised_start(id, dm_channels, relationships) do
     state = %__MODULE__{
       user_id: id,
       dm_channels: dm_channels,
       relationships: relationships
-    } 
+    }
+
     DynamicSupervisor.start_child(Stoat.Presence.Supervisor, {StoatGateway.Presence, state})
   end
 
@@ -59,7 +58,7 @@ defmodule StoatGateway.Presence do
       session_id: session_id,
       pid: pid,
       monitor: ref,
-      type: type,
+      type: type
     }
 
     {:noreply, %{state | sessions: [session | state.sessions]}}
@@ -76,6 +75,7 @@ defmodule StoatGateway.Presence do
 
   def handle_info({:presence_event_dispatch, {:UserUpdate, data} = payload}, state) do
     event_id = Map.get(data, "event_id")
+
     if event_id == state.last_event_id do
       {:noreply, state}
     else
@@ -83,7 +83,7 @@ defmodule StoatGateway.Presence do
       Enum.each(subscribers, &send(&1, {:presence_update, payload}))
       session_dispatch(payload, state)
       {:noreply, %{state | last_event_id: event_id}}
-    end 
+    end
   end
 
   def handle_info({:presence_event_dispatch, payload}, state) do
@@ -98,6 +98,7 @@ defmodule StoatGateway.Presence do
 
   def handle_info({:DOWN, ref, :process, _pid, _}, state) do
     new_sessions = Enum.reject(state.sessions, fn %{monitor: mref} -> mref == ref end)
+
     case new_sessions do
       [] -> {:stop, :normal, state}
       _ -> {:noreply, %{state | sessions: new_sessions}}
@@ -105,22 +106,24 @@ defmodule StoatGateway.Presence do
   end
 
   defp ensure_gdm_subscriptions(channels) do
-    subscriptions = Enum.map(channels, fn %{"_id" => channel} ->
-      {channel, self()}  
-    end)
+    subscriptions =
+      Enum.map(channels, fn %{"_id" => channel} ->
+        {channel, self()}
+      end)
+
     true = :ets.insert(:gdm_subscriptions, subscriptions)
   end
 
   defp ensure_friend_subscriptions(relationships) do
-    Enum.each(relationships, fn %{"_id" => friend_id, "status" => status} -> 
+    Enum.each(relationships, fn %{"_id" => friend_id, "status" => status} ->
       case status do
         "Friend" -> :pg.join(:presence, friend_id, self())
         _ -> nil
-      end 
+      end
     end)
   end
 
-  defp session_dispatch(payload, state) do 
+  defp session_dispatch(payload, state) do
     Enum.each(state.sessions, &send(&1.pid, {:socket_dispatch, payload}))
   end
 
