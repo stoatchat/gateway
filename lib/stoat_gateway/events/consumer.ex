@@ -72,6 +72,11 @@ defmodule StoatGateway.Events.Consumer do
     do: handle_channel_event(:MessageRemoveReaction, data)
 
   def handle_event("BulkMessageDelete", data), do: handle_channel_event(:BulkMessageDelete, data)
+  
+  def handle_event("ChannelUpdate", data), do: handle_channel_event(:ChannelUpdate, data)
+  def handle_event("ChannelDelete", data), do: handle_channel_event(:ChannelDelete, data)
+  def handle_event("ChannelGroupLeave", data), do: handle_channel_event(:ChannelGroupleave, data)
+
 
   # Server scoped events
   def handle_event("ServerCreate", _data) do
@@ -134,7 +139,11 @@ defmodule StoatGateway.Events.Consumer do
     end
   end
 
-  defp handle_server_event(event, %{"id" => server_id} = data) do
+  def parse_server_id(%{"id" => %{"server" => server_id}}), do: server_id
+  def parse_server_id(%{"id" => server_id}), do: server_id
+  
+  defp handle_server_event(event, data) do
+    server_id = parse_server_id(data)
     server_fanout(server_id, {event, data})
   end
 
