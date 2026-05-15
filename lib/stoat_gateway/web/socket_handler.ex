@@ -53,8 +53,8 @@ defmodule StoatGateway.Web.SocketHandler do
   # then we can just case a payload and extract those and handle each event as
   # def handle_payload(EVENT_TYPE, %Stoat.TypingEvent{} = data, state) do...
 
-  def handle_payload(%{"type" => "Ping"} = _payload, state) do
-    {:push, encode_frame(%{type: "Pong", data: System.os_time()}, state.format), state}
+  def handle_payload(%{"type" => "Ping", "data" => data} = _payload, state) do
+    {:push, encode_frame(%{type: "Pong", data: data}, state.format), state}
   end
 
   def handle_payload(%{"type" => "BeginTyping", "channel" => channel_id} = _payload, state) do
@@ -62,7 +62,8 @@ defmodule StoatGateway.Web.SocketHandler do
     {:ok, state}
   end
 
-  def handle_payload(%{"type" => "EndTyping", "channel" => _channel_id} = _payload, state) do
+  def handle_payload(%{"type" => "EndTyping", "channel" => channel_id} = _payload, state) do
+    GenServer.cast(state.linked_socket, {:event_stop_typing, channel_id})
     {:ok, state}
   end
 

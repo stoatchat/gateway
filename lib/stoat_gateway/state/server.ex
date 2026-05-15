@@ -83,6 +83,16 @@ defmodule StoatGateway.Server do
     {:noreply, state}
   end
 
+  def handle_cast({:dispatch_stop_typing, channel_id, user_id}, state) do
+    fanout(
+      {:ChannelStopTyping, %{type: "ChannelStopTyping", id: channel_id, user: user_id}},
+      state.linked_sessions
+    )
+
+    Logger.debug("server:#{inspect(self())} dispatching typing by #{user_id} to #{channel_id}")
+    {:noreply, state}
+  end
+
   def handle_info({:presence_update, payload}, state) do
     fanout(payload, state.linked_sessions)
     {:noreply, state}

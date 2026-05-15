@@ -189,7 +189,21 @@ defmodule StoatGateway.Session do
           {_, pid, _} -> GenServer.cast(pid, {:dispatch_begin_typing, channel_id, state.user_id})
           _ -> nil
         end
+      # TODO: We'll use Presence to fanout DM typing events
+      _ ->
+        nil
+    end
 
+    {:noreply, state}
+  end
+
+  def handle_cast({:event_stop_typing, channel_id}, state) do
+    case Enum.find(state.channels, fn %{"_id" => id} -> id == channel_id end) do
+      %{"server" => server_id} ->
+        case Enum.find(state.linked_servers, fn {id, _, _} -> id == server_id end) do
+          {_, pid, _} -> GenServer.cast(pid, {:dispatch_stop_typing, channel_id, state.user_id})
+          _ -> nil
+        end
       # TODO: We'll use Presence to fanout DM typing events
       _ ->
         nil
