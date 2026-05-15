@@ -55,7 +55,7 @@ defmodule StoatGateway.Server do
       user_id: user_id,
       pid: session_pid,
       monitor: ref,
-      bot: session_type,
+      type: session_type,
       roles: Map.get(member_data, "roles", [])
     }
 
@@ -99,7 +99,7 @@ defmodule StoatGateway.Server do
   end
 
   def handle_info({:DOWN, _ref, :process, pid, _}, state) do
-    user =
+    session =
       Enum.find(state.linked_sessions, %{}, fn session ->
         session.pid == pid
       end)
@@ -109,8 +109,8 @@ defmodule StoatGateway.Server do
         session.pid == pid
       end)
 
-    if not user_session_exists?(user, new_sessions) do
-      :pg.leave(:presence, user.id)
+    if not user_session_exists?(session, new_sessions) do
+      :pg.leave(:presence, session.user_id, self())
     end
 
     {:noreply,

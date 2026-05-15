@@ -8,7 +8,8 @@ defmodule Stoat.PublicUser do
             avatar: %{},
             badges: nil,
             relationship: nil,
-            online: nil
+            online: nil,
+            status: %{}
 end
 
 defmodule Stoat.User do

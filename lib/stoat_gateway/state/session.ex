@@ -267,8 +267,9 @@ defmodule StoatGateway.Session do
       display_name: Map.get(user, "display_name"),
       avatar: Map.get(user, "avatar", %{}),
       badges: Map.get(user, "badges"),
-      online: false,
-      _id: Map.get(user, "_id")
+      online: true,
+      _id: Map.get(user, "_id"),
+      status: %{}
     }
   end
 
