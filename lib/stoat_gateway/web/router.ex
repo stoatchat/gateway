@@ -14,7 +14,7 @@ defmodule StoatGateway.Web.Router do
 
         conn
         |> WebSockAdapter.upgrade(StoatGateway.Web.SocketHandler, conn.query_params,
-          timeout: 10_000
+          timeout: 35_000
         )
         |> halt()
 
