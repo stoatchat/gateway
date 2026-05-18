@@ -3,13 +3,11 @@ defmodule StoatGateway do
 
   @impl true
   def start(_type, _args) do
-    # TODO: investigate perf implications of object dedup on insert
-    # likely this whole logic will die once we can get the right fields in events
-    :ets.new(:gdm_subscriptions, [:named_table, :bag, :public])
     :ets.new(:channel_server_refs, [:named_table, :set, :public])
 
     children = [
-      %{id: :pg, start: {:pg, :start_link, [:presence]}},
+      %{id: :presence_group, start: {:pg, :start_link, [:presence]}},
+      %{id: :gdm_group, start: {:pg, :start_link, [:gdm_channels]}},
       {Registry, keys: :unique, name: Stoat.Servers},
       {Registry, keys: :duplicate, name: Stoat.Sessions},
       {Registry, keys: :unique, name: Stoat.Presence},

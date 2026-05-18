@@ -106,12 +106,9 @@ defmodule StoatGateway.Presence do
   end
 
   defp ensure_gdm_subscriptions(channels) do
-    subscriptions =
-      Enum.map(channels, fn %{"_id" => channel} ->
-        {channel, self()}
-      end)
-
-    true = :ets.insert(:gdm_subscriptions, subscriptions)
+    Enum.each(channels, fn %{"_id" => channel} ->
+      :pg.join(:gdm_channels, channel, self())
+    end)
   end
 
   defp ensure_friend_subscriptions(relationships) do
