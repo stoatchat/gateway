@@ -114,7 +114,7 @@ defmodule StoatGateway.Server do
     user_id = Map.get(session, "user_id")
 
     if not user_session_exists?(user_id, new_sessions) do
-      :pg.leave(:presence, session.user_id, self())
+      :pg.leave(:presence, user_id, self())
     end
 
     {:noreply,
@@ -185,48 +185,35 @@ defmodule StoatGateway.Server do
     removed_channels = previous_viewable_channels -- updated_viewable_channels
     added_channels = updated_viewable_channels -- previous_viewable_channels
 
-    dispatch_channel_deletes(new_session, removed_channels)
-    dispatch_channel_creates(new_session, added_channels)
+    build_channel_deletes(removed_channels) |> dispatch_maybe_bulk(new_session)
+    build_channel_creates(added_channels) |> dispatch_maybe_bulk(new_session)
 
     new_session
   end
 
-  # TODO: Dupe logic, simplify !
-  def dispatch_channel_creates(session, [channel]) do
-    send(
-      session.pid,
-      {:socket_dispatch, {:ChannelCreate, Map.put(channel, :type, :ChannelCreate)}}
-    )
+  def build_channel_creates(channels) do
+    Enum.map(channels, fn channel ->
+      Map.put(channel, :type, :ChannelCreate)
+    end)
   end
 
-  def dispatch_channel_creates(session, [_, _] = channels) do
-    bulk_deletes =
-      Enum.map(channels, fn channel ->
-        Map.put(channel, :type, :ChannelCreate)
-      end)
-
-    send(session.pid, {:socket_dispatch, {:Bulk, %{type: :Bulk, v: bulk_deletes}}})
+  def build_channel_deletes(channels) do
+    Enum.map(channels, fn %{"_id" => id} ->
+      %{type: :ChannelDelete, id: id}
+    end)
   end
 
-  def dispatch_channel_creates(_, []), do: nil
-
-  def dispatch_channel_deletes(session, [%{"_id" => id}]) do
-    send(session.pid, {:socket_dispatch, {:ChannelDelete, %{type: :ChannelDelete, id: id}}})
+  def dispatch_maybe_bulk([payload] = _events, session) do
+    send(session.pid, {:socket_dispatch, payload})
   end
 
-  def dispatch_channel_deletes(session, [_, _] = channels) do
-    bulk_deletes =
-      Enum.map(channels, fn %{"_id" => id} ->
-        %{type: :ChannelDelete, id: id}
-      end)
-
-    send(session.pid, {:socket_dispatch, {:Bulk, %{type: :Bulk, v: bulk_deletes}}})
+  def dispatch_maybe_bulk([_, _] = events, session) do
+    send(session.pid, {:socket_dispatch, {:Bulk, %{type: :Bulk, v: events}}})
   end
 
-  def dispatch_channel_deletes(_, []), do: nil
+  def dispatch_maybe_bulk([], _), do: nil
 
   def fanout(event, sessions) do
-    # TODO: just take an enum of sessions and higher level functions can filter as needed
     Enum.each(sessions, &send(&1.pid, {:socket_dispatch, event}))
   end
 
