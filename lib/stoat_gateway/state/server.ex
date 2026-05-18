@@ -128,7 +128,7 @@ defmodule StoatGateway.Server do
         :ServerMemberUpdate,
         %{
           "id" => %{"user" => member_id},
-          "data" => member
+          "data" => %{"roles" => updated_roles}
         },
         state
       ) do
@@ -136,7 +136,6 @@ defmodule StoatGateway.Server do
 
     updated_sessions =
       Enum.map(affected_sessions, fn old_session ->
-        updated_roles = Map.get(member, "roles")
 
         update_visibility_for_session(
           %{old_session | roles: updated_roles},
