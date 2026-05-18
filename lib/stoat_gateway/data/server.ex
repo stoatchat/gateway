@@ -15,6 +15,10 @@ defmodule Stoat.Server do
     end
   end
 
+  def fetch_channels(id) when is_binary(id) do
+    Mongo.find(:mongo_db, "channels", %{"server" => id}) |> Enum.to_list()
+  end
+
   def find_emojis_by_many(server_ids) when is_list(server_ids) do
     Mongo.find(:mongo_db, "emojis", %{"parent.id": %{"$in": server_ids}}) |> Enum.to_list()
   end
