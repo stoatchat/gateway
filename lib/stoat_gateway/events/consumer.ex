@@ -9,7 +9,12 @@ defmodule StoatGateway.Events.Consumer do
         module:
           {BroadwayRabbitMQ.Producer,
            connection: Application.get_env(:stoat_gateway, :rabbit),
-           queue: "stoat_events",
+           queue: "internal.events",
+           metadata: [:headers],
+           declare: [],
+           bindings: [
+             {"revolt.default", []}
+           ],
            qos: [prefetch_count: 10],
            on_failure: :reject},
         concurrency: 1
