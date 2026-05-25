@@ -64,6 +64,10 @@ defmodule StoatGateway.Presence do
     {:noreply, %{state | sessions: [session | state.sessions]}}
   end
 
+  def handle_call(:fetch_presence_status, _from, state) do
+    {:reply, {true, state.current_status}, state}
+  end
+
   def handle_call({:update_gdm_channels, _gdm_channels, _session_id}, state) do
     {:ok, state}
   end

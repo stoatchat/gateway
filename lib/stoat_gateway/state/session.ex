@@ -128,7 +128,11 @@ defmodule StoatGateway.Session do
       end
 
     user_ids = Map.get(state.data, "relations", [])
-    users = [build_ready_user(state.data, "User") | build_ready_relations_from_state(user_ids)]
+
+    users = [
+      build_ready_user(state.data, "User", {false, %{}})
+      | build_ready_relations_from_state(user_ids)
+    ]
 
     ready_payload = %Stoat.State.Ready{
       servers: servers,
@@ -175,12 +179,12 @@ defmodule StoatGateway.Session do
       end
 
     Process.monitor(presence_pid)
+    # TODO: send current status fetched from user
     GenServer.cast(presence_pid, {:session_link_async, state.session, state.type, self()})
     {:noreply, %{state | linked_presence: presence_pid}}
   end
 
   def handle_cast({:event_begin_typing, channel_id}, state) do
-    # Limit to channels we can view -> server will calculate final perms
     # we can then move more state onto the server process and calculate it all there?
     # benefit would be less state everywhere and the server can probably cache all of this
     case Enum.find(state.channels, fn %{"_id" => id} -> id == channel_id end) do
@@ -189,6 +193,7 @@ defmodule StoatGateway.Session do
           {_, pid, _} -> GenServer.cast(pid, {:dispatch_begin_typing, channel_id, state.user_id})
           _ -> nil
         end
+
       # TODO: We'll use Presence to fanout DM typing events
       _ ->
         nil
@@ -204,6 +209,7 @@ defmodule StoatGateway.Session do
           {_, pid, _} -> GenServer.cast(pid, {:dispatch_stop_typing, channel_id, state.user_id})
           _ -> nil
         end
+
       # TODO: We'll use Presence to fanout DM typing events
       _ ->
         nil
@@ -250,16 +256,23 @@ defmodule StoatGateway.Session do
 
   @spec build_ready_relations_from_state(map()) :: list(map())
   defp build_ready_relations_from_state(relations) do
-    Enum.map(relations, fn %{"_id" => id, "status" => status} ->
+    Enum.map(relations, fn %{"_id" => id, "status" => relation_status} ->
       user = Stoat.User.fetch_by_id(id)
+
+      presence =
+        case StoatGateway.Presence.lookup(id) do
+          {:ok, pid} -> GenServer.call(pid, :fetch_presence_status)
+          _ -> {false, %{}}
+        end
+
       # TODO: Fetch presence from ETS before v2?
       # Rearrange this flow in v2 to lazyload like server_session_link
       # Until then: fire presence update on connect?
-      build_ready_user(user, status)
+      build_ready_user(user, relation_status, presence)
     end)
   end
 
-  defp build_ready_user(user, relationship_status) do
+  defp build_ready_user(user, relationship_status, {online, status}) do
     %Stoat.PublicUser{
       relationship: relationship_status,
       username: Map.get(user, "username"),
@@ -267,9 +280,9 @@ defmodule StoatGateway.Session do
       display_name: Map.get(user, "display_name"),
       avatar: Map.get(user, "avatar", %{}),
       badges: Map.get(user, "badges"),
-      online: true,
+      online: online,
       _id: Map.get(user, "_id"),
-      status: %{}
+      status: status
     }
   end
 
