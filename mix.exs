@@ -27,7 +27,8 @@ defmodule StoatGateway.MixProject do
       {:broadway_rabbitmq, "~> 0.8.2"},
       {:jason, "~> 1.4"},
       {:msgpack, "~> 0.8.1"},
-      {:mongodb_driver, "~> 1.6"}
+      {:mongodb_driver, "~> 1.6"},
+      {:redix, "~>1.5"}
     ]
   end
 end
