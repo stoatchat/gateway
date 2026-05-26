@@ -50,7 +50,7 @@ defmodule StoatGateway.Presence do
     {:noreply, state}
   end
 
-  def handle_cast({:session_link_async, session_id, type, pid}, state) do
+  def handle_cast({:session_link_async, session_id, type, pid, status}, state) do
     Logger.debug("presence: session link id=#{inspect(session_id)} pid=#{inspect(pid)}")
     ref = Process.monitor(pid)
 
@@ -61,10 +61,11 @@ defmodule StoatGateway.Presence do
       type: type
     }
 
-    {:noreply, %{state | sessions: [session | state.sessions]}}
+    {:noreply, %{state | sessions: [session | state.sessions], current_status: status}}
   end
 
   def handle_call(:fetch_presence_status, _from, state) do
+    # NOTE: potential hot-path, calls could fail in a thundering herde scenario but unlikely
     {:reply, {true, state.current_status}, state}
   end
 

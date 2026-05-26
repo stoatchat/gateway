@@ -88,7 +88,6 @@ defmodule StoatGateway.Session do
           Enum.find(memberships, fn %{"_id" => %{"server" => server_id}} ->
             server_id == server_id
           end)
-
         GenServer.cast(
           pid,
           {:session_link_async, state.session, state.type, state.user_id, self(), member}
@@ -128,9 +127,9 @@ defmodule StoatGateway.Session do
       end
 
     user_ids = Map.get(state.data, "relations", [])
-
+    self_status = Map.get(user, "status", %{})
     users = [
-      build_ready_user(state.data, "User", {false, %{}})
+      build_ready_user(state.data, "User", {true, self_status})
       | build_ready_relations_from_state(user_ids)
     ]
 
@@ -155,7 +154,8 @@ defmodule StoatGateway.Session do
          linked_servers: server_pids,
          servers: servers,
          channels: channels,
-         memberships: memberships
+         memberships: memberships,
+         data: user
      }}
   end
 
@@ -179,8 +179,8 @@ defmodule StoatGateway.Session do
       end
 
     Process.monitor(presence_pid)
-    # TODO: send current status fetched from user
-    GenServer.cast(presence_pid, {:session_link_async, state.session, state.type, self()})
+    status = Map.get(state.data, "status", %{})
+    GenServer.cast(presence_pid, {:session_link_async, state.session, state.type, self(), status})
     {:noreply, %{state | linked_presence: presence_pid}}
   end
 
