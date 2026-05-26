@@ -11,7 +11,7 @@ defmodule StoatGateway.Events.Consumer do
            connection: Application.get_env(:stoat_gateway, :rabbit),
            queue: "internal.events",
            metadata: [:headers],
-           declare: [],
+           declare: [{:exclusive, true}],
            bindings: [
              {"revolt.default", []}
            ],
