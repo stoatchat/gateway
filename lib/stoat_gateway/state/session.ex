@@ -88,6 +88,7 @@ defmodule StoatGateway.Session do
           Enum.find(memberships, fn %{"_id" => %{"server" => server_id}} ->
             server_id == server_id
           end)
+
         GenServer.cast(
           pid,
           {:session_link_async, state.session, state.type, state.user_id, self(), member}
@@ -128,10 +129,13 @@ defmodule StoatGateway.Session do
 
     user_ids = Map.get(state.data, "relations", [])
     self_status = Map.get(user, "status", %{})
+
     users = [
       build_ready_user(state.data, "User", {true, self_status})
       | build_ready_relations_from_state(user_ids)
     ]
+
+    voice_states = fetch_voice_states(filter_voice_enabled_channels(channels))
 
     ready_payload = %Stoat.State.Ready{
       servers: servers,
@@ -141,7 +145,8 @@ defmodule StoatGateway.Session do
       user_settings: user_settings,
       channel_unreads: channel_unreads,
       policy_changes: policy_changes,
-      users: users
+      users: users,
+      voice_states: voice_states
     }
 
     send(state.linked_socket, {:ready, ready_payload})
@@ -286,9 +291,80 @@ defmodule StoatGateway.Session do
     }
   end
 
+  defp fetch_voice_states(voice_channels) do
+    Enum.map(voice_channels, fn %{"_id" => id} ->
+      case Redix.command(:redix, ["SMEMBERS", "vc_members:#{id}"]) do
+        {:ok, []} ->
+          nil
+
+        {:ok, members} ->
+          participants = fetch_voice_participants(id, members)
+
+          %{
+            id: id,
+            participants: participants
+          }
+      end
+    end)
+    |> Enum.reject(fn state -> state == nil end)
+  end
+
+  def fetch_voice_participants(channel_id, members) do
+    Enum.map(members, fn id ->
+      participant_key = "#{id}:#{channel_id}"
+
+      case Redix.command(:redix, [
+             "MGET",
+             "joined_at:#{participant_key}",
+             "is_publishing:#{participant_key}",
+             "is_receiving:#{participant_key}",
+             "screensharing:#{participant_key}",
+             "camera:#{participant_key}"
+           ]) do
+        {:ok, [joined_at, publishing, receiving, screenshare, camera]} ->
+          %{
+            id: id,
+            joined_at: joined_at,
+            is_publishing: intstring_to_bool!(publishing),
+            is_receiving: intstring_to_bool!(receiving),
+            screensharing: intstring_to_bool!(screenshare),
+            camera: intstring_to_bool!(camera)
+          }
+
+        _ ->
+          nil
+      end
+    end)
+  end
+
+  def intstring_to_bool!("0"), do: false
+  def intstring_to_bool!("1"), do: true
+  def intstring_to_bool!(_), do: false
+
   defp filter_dm_channels(channels) do
     Enum.filter(channels, fn %{"channel_type" => type} ->
       type in ["DirectMessage", "Group", "SavedMessages"]
+    end)
+  end
+
+  defp filter_voice_enabled_channels(channels) do
+    Enum.filter(channels, fn %{"channel_type" => type} = channel ->
+      case type do
+        "DirectMessage" ->
+          true
+
+        "Group" ->
+          true
+
+        "TextChannel" ->
+          case channel do
+            %{"voice" => _voice} -> true
+            _ -> false
+          end
+
+        _ ->
+          false
+      end
     end)
   end
 
