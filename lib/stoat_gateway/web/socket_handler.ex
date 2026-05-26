@@ -15,24 +15,11 @@ defmodule StoatGateway.Web.SocketHandler do
         _ -> :json
       end
 
-    with {:ok, token} <- Map.fetch(query_params, "token"),
-         {type, data} <- StoatGateway.Auth.find_by_token(token) do
-      # Start the session process
-      # TODO: Check for alive session process-
-      {:ok, socket_pid} =
-        DynamicSupervisor.start_child(
-          Stoat.Sessions.Supervisor,
-          {StoatGateway.Session, %{data: data, socket: self(), type: type}}
-        )
-
-      Process.monitor(socket_pid)
-
-      {:push, build_event(:Authenticated, format),
-       %__MODULE__{ready: true, format: format, linked_socket: socket_pid}}
+    with {:ok, token} <- Map.fetch(query_params, "token") do
+      handle_auth(token, format)
     else
       _ ->
-        {:stop, :normal, 1007, build_error("InvalidSession", format),
-         %__MODULE__{ready: false, format: format}}
+        {:ok, %__MODULE__{ready: false, format: format}}
     end
   end
 
@@ -41,30 +28,50 @@ defmodule StoatGateway.Web.SocketHandler do
     data = decode_frame(frame, state.format)
 
     case data do
-      {:ok, payload} -> handle_payload(payload, state)
+      {:ok, payload} ->
+        handle_payload(payload, state)
+
       # TODO: Correct error format
-      _ -> {:stop, :normal, 1007, build_error("InvalidPayload", state.format), state}
+      _ ->
+        {:stop, :normal, 1007,
+         build_error(
+           "InvalidPayload",
+           "Incoming payload does not match required format",
+           state.format
+         ), state}
     end
   end
 
-  # Not sure about pattern matching the whole thing yet-
-  # Might be a bit ugly as we go- 
-  # v2 proto should definitely have an Enum for type and a consistent data key
-  # then we can just case a payload and extract those and handle each event as
-  # def handle_payload(EVENT_TYPE, %Stoat.TypingEvent{} = data, state) do...
+  def handle_payload(
+        %{"type" => "Authenticate", "token" => token} = _payload,
+        %{ready: false} = state
+      ) do
+    handle_auth(token, state.format)
+  end
 
-  def handle_payload(%{"type" => "Ping", "data" => data} = _payload, state) do
+  def handle_payload(%{"type" => "ping", "data" => data} = _payload, %{ready: true} = state) do
     {:push, encode_frame(%{type: "Pong", data: data}, state.format), state}
   end
 
-  def handle_payload(%{"type" => "BeginTyping", "channel" => channel_id} = _payload, state) do
+  def handle_payload(
+        %{"type" => "BeginTyping", "channel" => channel_id} = _payload,
+        %{ready: true} = state
+      ) do
     GenServer.cast(state.linked_socket, {:event_begin_typing, channel_id})
     {:ok, state}
   end
 
-  def handle_payload(%{"type" => "EndTyping", "channel" => channel_id} = _payload, state) do
+  def handle_payload(
+        %{"type" => "EndTyping", "channel" => channel_id} = _payload,
+        %{ready: true} = state
+      ) do
     GenServer.cast(state.linked_socket, {:event_stop_typing, channel_id})
     {:ok, state}
+  end
+
+  def handle_payload(_, %{ready: false} = state) do
+    {:stop, :normal, 1007, build_error("InvalidSession", "Not Authenticated", state.format),
+     state}
   end
 
   def handle_payload(_, state) do
@@ -107,19 +114,44 @@ defmodule StoatGateway.Web.SocketHandler do
     {:ok, state}
   end
 
+  defp handle_auth(token, format) do
+    with {type, data} <- StoatGateway.Auth.find_by_token(token) do
+      # TODO: Lookup
+      {:ok, socket_pid} =
+        DynamicSupervisor.start_child(
+          Stoat.Sessions.Supervisor,
+          {StoatGateway.Session, %{data: data, socket: self(), type: type}}
+        )
+
+      Process.monitor(socket_pid)
+
+      {:push, build_event(:Authenticated, format),
+       %__MODULE__{ready: true, format: format, linked_socket: socket_pid}}
+    else
+      _ ->
+        {:push, build_error(:InvalidSession, "Invalid token provided", format),
+         %__MODULE__{ready: false, format: format}}
+    end
+  end
+
   @spec build_event(binary(), atom()) :: {:text | :binary, binary()}
   defp build_event(event, format) do
     encode_frame(%{type: event}, format)
   end
 
-  @spec build_event(binary(), map(), atom()) :: {:text | :binary, binary()}
-  defp build_event(event, payload, format) do
+  @spec _build_event(binary(), map(), atom()) :: {:text | :binary, binary()}
+  defp _build_event(event, payload, format) do
     encode_frame(%{type: event, data: payload}, format)
   end
 
   @spec build_error(binary(), atom()) :: {:text | :binary, binary()}
-  defp build_error(detail, format) do
-    encode_frame(%{type: "Error", data: %{type: detail}}, format)
+  defp build_error(error_type, format) do
+    encode_frame(%{type: "Error", data: %{type: error_type}}, format)
+  end
+
+  @spec build_error(binary(), binary(), atom()) :: {:text | :binary, binary()}
+  defp build_error(error_type, detail, format) do
+    encode_frame(%{type: "Error", data: %{type: error_type, detail: detail}}, format)
   end
 
   @spec encode_frame(map(), :json | :etf | :msgpack) :: {:text | :binary, binary()}
