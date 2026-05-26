@@ -28,8 +28,8 @@ defmodule StoatGateway.Web.SocketHandler do
     data = decode_frame(frame, state.format)
 
     case data do
-      {:ok, payload} ->
-        handle_payload(payload, state)
+      {:ok, %{"type" => type} = payload} ->
+      handle_payload(String.downcase(type), payload, state)
 
       # TODO: Correct error format
       _ ->
@@ -43,18 +43,20 @@ defmodule StoatGateway.Web.SocketHandler do
   end
 
   def handle_payload(
-        %{"type" => "Authenticate", "token" => token} = _payload,
+        "authenticate",
+        %{"token" => token} = _payload,
         %{ready: false} = state
       ) do
     handle_auth(token, state.format)
   end
 
-  def handle_payload(%{"type" => "ping", "data" => data} = _payload, %{ready: true} = state) do
+  def handle_payload("ping", %{"data" => data} = _payload, %{ready: true} = state) do
     {:push, encode_frame(%{type: "Pong", data: data}, state.format), state}
   end
 
   def handle_payload(
-        %{"type" => "BeginTyping", "channel" => channel_id} = _payload,
+        "begintyping",
+        %{"channel" => channel_id} = _payload,
         %{ready: true} = state
       ) do
     GenServer.cast(state.linked_socket, {:event_begin_typing, channel_id})
@@ -62,7 +64,8 @@ defmodule StoatGateway.Web.SocketHandler do
   end
 
   def handle_payload(
-        %{"type" => "EndTyping", "channel" => channel_id} = _payload,
+        "endtyping",
+        %{"channel" => channel_id} = _payload,
         %{ready: true} = state
       ) do
     GenServer.cast(state.linked_socket, {:event_stop_typing, channel_id})
