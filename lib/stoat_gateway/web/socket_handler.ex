@@ -29,7 +29,7 @@ defmodule StoatGateway.Web.SocketHandler do
 
     case data do
       {:ok, %{"type" => type} = payload} ->
-      handle_payload(String.downcase(type), payload, state)
+        handle_payload(String.downcase(type), payload, state)
 
       # TODO: Correct error format
       _ ->

@@ -136,7 +136,6 @@ defmodule StoatGateway.Server do
 
     updated_sessions =
       Enum.map(affected_sessions, fn old_session ->
-
         update_visibility_for_session(
           %{old_session | roles: updated_roles},
           old_session,
