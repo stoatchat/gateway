@@ -184,36 +184,29 @@ defmodule StoatGateway.Server do
     end)
   end
 
-  def update_visibility_for_session(session, old_state, new_state) do
-    partial_member = %{"_id" => %{"user" => session.user_id}, "roles" => session.roles}
-  end
+  def update_visibility_for_session(old_session, new_session, old_state, new_state) do
+    partial_member = %{"_id" => %{"user" => old_session.user_id}, "roles" => old_session.roles}
 
-  def update_visibility_for_session(new_session, old_session, channels, server) do
-    stripped_member = %{"_id" => %{"user" => old_session.user_id}, "roles" => old_session.roles}
+    previous_viewable_channels = Enum.filter(old_state.channels, fn -> 
+      Stoat.Permissions.permissions_for_channel(channel, partial_member, old_state.data)
+      |> Stoat.permissions.has_permission?(Stoat.Permissions.bits.view_channel())
+    end)
 
-    previous_viewable_channels =
-      Enum.filter(channels, fn channel ->
-        Stoat.Permissions.permissions_for_channel(channel, stripped_member, server)
-        |> Stoat.Permissions.has_permission?(Stoat.Permissions.Bits.view_channel())
-      end)
+    new_partial = Map.merge(partial_member, %{"roles" => new_session.roles})
+    # Recalculated with updated-state e.g., new/deleted channels/roles/permissions for either
+    updated_viewable_channels = Enum.filter(new_state.channels, fn -> 
+      Stoat.Permissions.permissions_for_channel(channel, partial_member, new_state.data)
+      |> Stoat.permissions.has_permission?(Stoat.Permissions.bits.view_channel())
 
-    stripped_member = Map.merge(stripped_member, %{"roles" => new_session.roles})
-
-    updated_viewable_channels =
-      Enum.filter(channels, fn channel ->
-        Stoat.Permissions.permissions_for_channel(channel, stripped_member, server)
-        |> Stoat.Permissions.has_permission?(Stoat.Permissions.Bits.view_channel())
-      end)
+    end)
 
     removed_channels = previous_viewable_channels -- updated_viewable_channels
     added_channels = updated_viewable_channels -- previous_viewable_channels
 
     build_channel_deletes(removed_channels) |> dispatch_maybe_bulk(new_session)
     build_channel_creates(added_channels) |> dispatch_maybe_bulk(new_session)
-
-    new_session
   end
-
+  
   def build_channel_creates(channels) do
     Enum.map(channels, fn channel ->
       Map.put(channel, :type, :ChannelCreate)
