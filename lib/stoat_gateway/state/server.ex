@@ -135,35 +135,60 @@ defmodule StoatGateway.Server do
     affected_sessions = filter_sessions_by_id(state.linked_sessions, member_id)
 
     updated_sessions =
-      Enum.map(affected_sessions, fn old_session ->
-        update_visibility_for_session(
-          %{old_session | roles: updated_roles},
-          old_session,
-          state.channels,
-          state.data
-        )
+      Enum.map(state.linked_sessions, fn session ->
+        if Enum.member?(affected_sessions, session) do
+          %{session | roles: updated_roles}
+        else
+          session
+        end
       end)
 
-    %{state | linked_sessions: updated_sessions}
+    updated_state = %{state | linked_sessions: updated_sessions}
+    update_visibility_for_sessions(affected_sessions, state, updated_state)
+    updated_state
   end
 
-  def push_state_changes(:ServerRoleUpdate, _, state) do
+  def push_state_changes(
+        :ServerRoleUpdate,
+        %{"role_id" => role_id, "data" => %{"permissions" => permissions}},
+        state
+      ) do
+    sessions = filter_sessions_by_role(state.linked_sessions, role_id)
+    IO.inspect(sessions)
     state
   end
 
   def push_state_changes(:ServerRoleDelete, _, state) do
+    # TODO: state to change 
+    # - remove role from all members/sessions
+    # - remove role from server (to void default_permissions)
     state
   end
 
-  def push_state_changes(:ChannelUpdate, _, state) do
+  def push_state_changes(
+        :ChannelUpdate,
+        %{"id" => channel_id, "data" => %{"role_permissions" => role_permissions}},
+        state
+      ) do
+    # TODO: state to change
+    # - Update role permissions for each role in the map
+    # - Recalclulate for each affected roles users (dedupe)
     state
   end
 
   def push_state_changes(_, _, state), do: state
 
+  def update_visibility_for_sessions(sessions, old_state, new_state) do
+    Enum.each(sessions, fn session ->
+      update_visibility_for_session(session, old_state, new_state)
+    end)
+  end
+
+  def update_visibility_for_session(session, old_state, new_state) do
+    partial_member = %{"_id" => %{"user" => session.user_id}, "roles" => session.roles}
+  end
+
   def update_visibility_for_session(new_session, old_session, channels, server) do
-    # Check when not 1am!
-    # TODO: Adjust permissions API to accept inconsistent keys like we have here...
     stripped_member = %{"_id" => %{"user" => old_session.user_id}, "roles" => old_session.roles}
 
     previous_viewable_channels =
@@ -210,6 +235,13 @@ defmodule StoatGateway.Server do
   end
 
   def dispatch_maybe_bulk([], _), do: nil
+
+  def filter_sessions_by_role(sessions, role_id) do
+    Enum.filter(sessions, fn session ->
+      roles = Map.get(session, :roles, [])
+      Enum.member?(roles, role_id)
+    end)
+  end
 
   def fanout(event, sessions) do
     Enum.each(sessions, &send(&1.pid, {:socket_dispatch, event}))
