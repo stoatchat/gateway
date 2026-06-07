@@ -180,23 +180,24 @@ defmodule StoatGateway.Server do
 
   def update_visibility_for_sessions(sessions, old_state, new_state) do
     Enum.each(sessions, fn session ->
-      update_visibility_for_session(session, old_state, new_state)
+      new_session = Enum.find(new_state.linked_sessions, fn s -> session.user_id == s.user_id end)
+      update_visibility_for_session(session, new_session, old_state, new_state)
     end)
   end
 
   def update_visibility_for_session(old_session, new_session, old_state, new_state) do
     partial_member = %{"_id" => %{"user" => old_session.user_id}, "roles" => old_session.roles}
 
-    previous_viewable_channels = Enum.filter(old_state.channels, fn -> 
+    previous_viewable_channels = Enum.filter(old_state.channels, fn channel -> 
       Stoat.Permissions.permissions_for_channel(channel, partial_member, old_state.data)
-      |> Stoat.permissions.has_permission?(Stoat.Permissions.bits.view_channel())
+      |> Stoat.Permissions.has_permission?(Stoat.Permissions.Bits.view_channel())
     end)
 
     new_partial = Map.merge(partial_member, %{"roles" => new_session.roles})
     # Recalculated with updated-state e.g., new/deleted channels/roles/permissions for either
-    updated_viewable_channels = Enum.filter(new_state.channels, fn -> 
-      Stoat.Permissions.permissions_for_channel(channel, partial_member, new_state.data)
-      |> Stoat.permissions.has_permission?(Stoat.Permissions.bits.view_channel())
+    updated_viewable_channels = Enum.filter(new_state.channels, fn channel -> 
+      Stoat.Permissions.permissions_for_channel(channel, new_partial, new_state.data)
+      |> Stoat.Permissions.has_permission?(Stoat.Permissions.Bits.view_channel())
 
     end)
 
