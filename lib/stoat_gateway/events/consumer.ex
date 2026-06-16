@@ -117,6 +117,7 @@ defmodule StoatGateway.Events.Consumer do
 
   def parse_channel_id(%{"channel" => channel_id}), do: channel_id
   def parse_channel_id(%{"channel_id" => channel_id}), do: channel_id
+  def parse_channel_id(%{"id" => channel_id}), do: channel_id
 
   defp handle_channel_event(event, data) do
     channel_id = parse_channel_id(data)
