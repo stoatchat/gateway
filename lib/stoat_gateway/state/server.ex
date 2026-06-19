@@ -171,7 +171,6 @@ defmodule StoatGateway.Server do
   end
 
   def push_state_changes(:ServerRoleDelete, %{"role_id" => role_id}, state) do
-    # TODO: remove role from all members/sessions
     affected_sessions = filter_sessions_by_role(state.linked_sessions, role_id)
 
     data =
@@ -201,9 +200,29 @@ defmodule StoatGateway.Server do
         %{channel | "role_permissions" => role_permissions}
       end)
 
-    # TODO:
-    # - Calculate affected sessions and then update their visibility
-    %{state | channels: new_channels}
+    affected_sessions =
+      Map.keys(role_permissions)
+      |> Enum.each(fn role -> filter_sessions_by_role(state.linked_sessions, role) end)
+      |> Enum.dedup()
+
+    updated_state = %{state | channels: new_channels}
+    update_visibility_for_sessions(affected_sessions, state, updated_state)
+    updated_state
+  end
+
+  def push_state_changes(
+    :ChannelUpdate, 
+    %{"id" => channel_id, "data" => %{"default_permissions" => default_permissions}},
+    state
+  ) do
+    new_channels = 
+      Map.update!(state.channels, channel_id, fn channel -> 
+        %{channel | "default_permissions" => default_permissions}
+      end)
+
+    updated_state = %{state | channels: new_channels}
+    update_visibility_for_sessions(state.linked_sessions, state, updated_state)
+    updated_state
   end
 
   def push_state_changes(_, _, state), do: state
