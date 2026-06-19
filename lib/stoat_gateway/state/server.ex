@@ -82,8 +82,8 @@ defmodule StoatGateway.Server do
   def handle_cast({:dispatch_begin_typing, channel_id, user_id}, state) do
     GenServer.cast(
       self(),
-      {:dispatch,
-       :ChannelStartTyping, %{type: "ChannelStartTyping", id: channel_id, user: user_id}}
+      {:dispatch, :ChannelStartTyping,
+       %{type: "ChannelStartTyping", id: channel_id, user: user_id}}
     )
 
     Logger.debug("server:#{inspect(self())} dispatching typing by #{user_id} to #{channel_id}")
@@ -93,8 +93,7 @@ defmodule StoatGateway.Server do
   def handle_cast({:dispatch_stop_typing, channel_id, user_id}, state) do
     GenServer.cast(
       self(),
-      {:dispatch,
-       :ChannelStopTyping, %{type: "ChannelStopTyping", id: channel_id, user: user_id}}
+      {:dispatch, :ChannelStopTyping, %{type: "ChannelStopTyping", id: channel_id, user: user_id}}
     )
 
     Logger.debug("server:#{inspect(self())} dispatching typing by #{user_id} to #{channel_id}")
@@ -198,6 +197,8 @@ defmodule StoatGateway.Server do
         %{"id" => channel_id, "data" => %{"role_permissions" => role_permissions}},
         state
       ) do
+    Logger.debug("server: push_state_changes: :ChannelUpdate match RolePermissions ")
+
     new_channels =
       Map.update!(state.channels, channel_id, fn channel ->
         %{channel | "role_permissions" => role_permissions}
@@ -205,7 +206,7 @@ defmodule StoatGateway.Server do
 
     affected_sessions =
       Map.keys(role_permissions)
-      |> Enum.each(fn role -> filter_sessions_by_role(state.linked_sessions, role) end)
+      |> Enum.map(fn role -> filter_sessions_by_role(state.linked_sessions, role) end)
       |> Enum.dedup()
 
     updated_state = %{state | channels: new_channels}
@@ -218,6 +219,8 @@ defmodule StoatGateway.Server do
         %{"id" => channel_id, "data" => %{"default_permissions" => default_permissions}},
         state
       ) do
+    Logger.debug("server: push_state_changes: :ChannelUpdate match DefaultPermissions ")
+
     new_channels =
       Map.update!(state.channels, channel_id, fn channel ->
         %{channel | "default_permissions" => default_permissions}
@@ -246,6 +249,7 @@ defmodule StoatGateway.Server do
         Stoat.Permissions.permissions_for_channel(channel, partial_member, old_state.data)
         |> Stoat.Permissions.has_permission?(Stoat.Permissions.Bits.view_channel())
       end)
+      |> Enum.map(fn %{"_id" => id} -> id end)
 
     new_partial = Map.merge(partial_member, %{"roles" => new_session.roles})
     # Recalculated with updated-state e.g., new/deleted channels/roles/permissions for either
@@ -255,11 +259,19 @@ defmodule StoatGateway.Server do
         Stoat.Permissions.permissions_for_channel(channel, new_partial, new_state.data)
         |> Stoat.Permissions.has_permission?(Stoat.Permissions.Bits.view_channel())
       end)
+      |> Enum.map(fn %{"_id" => id} -> id end)
 
-    removed_channels = previous_viewable_channels -- updated_viewable_channels
-    added_channels = updated_viewable_channels -- previous_viewable_channels
+    removed_channel_ids = previous_viewable_channels -- updated_viewable_channels
+    added_channel_ids = updated_viewable_channels -- previous_viewable_channels
 
-    build_channel_deletes(removed_channels) |> dispatch_maybe_bulk(new_session)
+    # Slightly backwards but we'll calc visibility into ids and then filter by ids...
+    added_channels =
+      Map.filter(new_state.channels, fn {id, _} ->
+        Enum.member?(added_channel_ids, id)
+      end)
+      |> Map.values()
+
+    build_channel_deletes(removed_channel_ids) |> dispatch_maybe_bulk(new_session)
     build_channel_creates(added_channels) |> dispatch_maybe_bulk(new_session)
   end
 
@@ -270,12 +282,13 @@ defmodule StoatGateway.Server do
   end
 
   def build_channel_deletes(channels) do
-    Enum.map(channels, fn %{"_id" => id} ->
+    Enum.map(channels, fn id ->
       %{type: :ChannelDelete, id: id}
     end)
   end
 
   def dispatch_maybe_bulk([payload] = _events, session) do
+    Logger.debug("server: dispatch_maybe_bulk single event #{session.user_id}")
     send(session.pid, {:socket_dispatch, {payload.type, payload}})
   end
 
