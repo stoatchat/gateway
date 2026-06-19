@@ -71,7 +71,8 @@ defmodule StoatGateway.Server do
   end
 
   def handle_cast({:dispatch, event, payload}, state) do
-    fanout({event, payload}, state.linked_sessions)
+    sessions = filtered_sessions_for_event(event, payload, state)
+    fanout({event, payload}, sessions)
     new_state = push_state_changes(event, payload, state)
     {:noreply, new_state}
   end
@@ -79,9 +80,10 @@ defmodule StoatGateway.Server do
   # TODO: probably want a general dispatch catch and then another func for specific topics
   # say channel, overall
   def handle_cast({:dispatch_begin_typing, channel_id, user_id}, state) do
-    fanout(
-      {:ChannelStartTyping, %{type: "ChannelStartTyping", id: channel_id, user: user_id}},
-      state.linked_sessions
+    GenServer.cast(
+      self(),
+      {:dispatch,
+       :ChannelStartTyping, %{type: "ChannelStartTyping", id: channel_id, user: user_id}}
     )
 
     Logger.debug("server:#{inspect(self())} dispatching typing by #{user_id} to #{channel_id}")
@@ -89,9 +91,10 @@ defmodule StoatGateway.Server do
   end
 
   def handle_cast({:dispatch_stop_typing, channel_id, user_id}, state) do
-    fanout(
-      {:ChannelStopTyping, %{type: "ChannelStopTyping", id: channel_id, user: user_id}},
-      state.linked_sessions
+    GenServer.cast(
+      self(),
+      {:dispatch,
+       :ChannelStopTyping, %{type: "ChannelStopTyping", id: channel_id, user: user_id}}
     )
 
     Logger.debug("server:#{inspect(self())} dispatching typing by #{user_id} to #{channel_id}")
@@ -211,12 +214,12 @@ defmodule StoatGateway.Server do
   end
 
   def push_state_changes(
-    :ChannelUpdate, 
-    %{"id" => channel_id, "data" => %{"default_permissions" => default_permissions}},
-    state
-  ) do
-    new_channels = 
-      Map.update!(state.channels, channel_id, fn channel -> 
+        :ChannelUpdate,
+        %{"id" => channel_id, "data" => %{"default_permissions" => default_permissions}},
+        state
+      ) do
+    new_channels =
+      Map.update!(state.channels, channel_id, fn channel ->
         %{channel | "default_permissions" => default_permissions}
       end)
 
@@ -235,7 +238,7 @@ defmodule StoatGateway.Server do
   end
 
   def update_visibility_for_session(old_session, new_session, old_state, new_state) do
-    partial_member = %{"_id" => %{"user" => old_session.user_id}, "roles" => old_session.roles}
+    partial_member = partial_from_session(old_session)
 
     previous_viewable_channels =
       Map.values(old_state.channels)
@@ -302,6 +305,28 @@ defmodule StoatGateway.Server do
 
   def filter_sessions_by_id(sessions, user_id) do
     Enum.filter(sessions, fn session -> session.user_id == user_id end)
+  end
+
+  def filtered_sessions_for_event(event, data, state = %__MODULE__{}) do
+    case StoatGateway.Events.Consumer.is_channel_event?(event) do
+      true ->
+        channel_id = StoatGateway.Events.Consumer.parse_channel_id(data)
+        channel = Map.get(state.channels, channel_id)
+
+        Enum.filter(state.linked_sessions, fn session ->
+          partial_user = partial_from_session(session)
+
+          Stoat.Permissions.permissions_for_channel(channel, partial_user, state.data)
+          |> Stoat.Permissions.has_permission?(Stoat.Permissions.Bits.view_channel())
+        end)
+
+      false ->
+        state.linked_sessions
+    end
+  end
+
+  defp partial_from_session(session) do
+    %{"_id" => %{"user" => session.user_id}, "roles" => session.roles}
   end
 
   defp build_channel_tuples(state) do
