@@ -9,11 +9,11 @@ defmodule StoatGateway.Events.Consumer do
         module:
           {BroadwayRabbitMQ.Producer,
            connection: Application.get_env(:stoat_gateway, :rabbit),
-           queue: "internal.events",
+           queue: "internal.event",
            metadata: [:headers],
            declare: [{:exclusive, true}],
            bindings: [
-             {"revolt.default", []}
+             {"revolt.default", [{:routing_key, "internal.event"}]}
            ],
            qos: [prefetch_count: 10],
            on_failure: :reject},
@@ -118,6 +118,7 @@ defmodule StoatGateway.Events.Consumer do
   def parse_channel_id(%{"channel" => channel_id}), do: channel_id
   def parse_channel_id(%{"channel_id" => channel_id}), do: channel_id
   def parse_channel_id(%{"id" => channel_id}), do: channel_id
+  def parse_channel_id(%{id: channel_id}), do: channel_id
 
   def is_channel_event?(:MessageCreate), do: true
   def is_channel_event?(:MessageAppend), do: true
