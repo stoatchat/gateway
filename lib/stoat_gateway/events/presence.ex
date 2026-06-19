@@ -47,6 +47,7 @@ defmodule StoatGateway.Presence do
   def handle_continue(:ensure_init, state) do
     ensure_gdm_subscriptions(state.dm_channels)
     ensure_friend_subscriptions(state.relationships)
+    ensure_online_set_subscription(state)
     {:noreply, state}
   end
 
@@ -125,8 +126,16 @@ defmodule StoatGateway.Presence do
     end)
   end
 
+  defp ensure_online_set_subscription(state) do
+    Redix.command(:redix, ["SADD", "online", state.user_id])
+  end
+
   defp session_dispatch(payload, state) do
     Enum.each(state.sessions, &send(&1.pid, {:socket_dispatch, payload}))
+  end
+
+  def terminate(_, state) do
+    Redix.command(:redix, ["SREM", "online", state.user_id])
   end
 
   def code_change(_old_vsn, state, _extra), do: {:ok, state}
