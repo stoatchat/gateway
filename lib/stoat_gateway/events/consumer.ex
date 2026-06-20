@@ -33,9 +33,12 @@ defmodule StoatGateway.Events.Consumer do
     |> Broadway.Message.update_data(&decode_message!/1)
     |> process_message()
   end
-
-  defp process_message(%Broadway.Message{data: {:ok, data}} = message) do
-    process_event(data)
+  
+  # TODO: Figure out a way to parse the channels such as `uid!` etc. etc.
+  defp process_message(
+         %Broadway.Message{data: {:ok, data}, metadata: %{headers: [{"c", _, channel}]}} = message
+       ) do
+    process_event(data, channel)
     message
   end
 
@@ -45,15 +48,11 @@ defmodule StoatGateway.Events.Consumer do
     message
   end
 
-  # NOTE: Big problem here is what data some events provide
-  # Ideally:
-  # - We have channel type to reduce look ups
-  # - Channels in a server have a server_id key
-  # Test relay is just `PSUBSCRIBE *` into RMQ queue
-
-  def process_event(%{"type" => event_type} = data) do
+  # NOTE: We use the `c` header in RMQ to match the intended channel from Delta
+  def process_event(%{"type" => event_type} = data, channel) do
     # TODO: wrap telemetry and otel context around this
     # Can also add future pushnotif decisions here?
+    Logger.debug("consumer: channel header: #{inspect(channel)} for event #{event_type}")
     handle_event(event_type, data)
   end
 
@@ -81,6 +80,9 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("ChannelUpdate", data), do: handle_channel_event(:ChannelUpdate, data)
   def handle_event("ChannelDelete", data), do: handle_channel_event(:ChannelDelete, data)
   def handle_event("ChannelGroupLeave", data), do: handle_channel_event(:ChannelGroupleave, data)
+
+  def handle_event("VoiceChannelJoin", data), do: handle_channel_event(:VoiceChannelJoin, data)
+  def handle_event("VoiceChannelLeave", data), do: handle_channel_event(:VoiceChannelLeave, data)
 
   # Server scoped events
   def handle_event("ServerCreate", _data) do
@@ -131,6 +133,8 @@ defmodule StoatGateway.Events.Consumer do
   def is_channel_event?(:ChannelDelete), do: true
   def is_channel_event?(:ChannelStartTyping), do: true
   def is_channel_event?(:ChannelStopTyping), do: true
+  def is_channel_event?(:VoiceChannelJoin), do: true
+  def is_channel_event?(:VoiceChannelLeave), do: true
   def is_channel_event?(_), do: false
 
   defp handle_channel_event(event, data) do
