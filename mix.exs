@@ -28,7 +28,9 @@ defmodule StoatGateway.MixProject do
       {:jason, "~> 1.4"},
       {:msgpack, "~> 0.8.1"},
       {:mongodb_driver, "~> 1.6"},
-      {:redix, "~>1.5"}
+      {:redix, "~>1.5"},
+      {:ex_hash_ring, "~> 7.0"},
+      {:libcluster, "~> 3.5"}
     ]
   end
 end
