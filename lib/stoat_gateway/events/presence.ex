@@ -79,7 +79,11 @@ defmodule StoatGateway.Presence do
     {:noreply, state}
   end
 
-  def handle_info({:presence_event_dispatch, {:UserUpdate, data} = payload}, state) do
+  def handle_info(
+        {:presence_event_dispatch, {:UserUpdate, %{"id" => user_id} = data} = payload},
+        state
+      )
+      when user_id == state.user_id do
     event_id = Map.get(data, "event_id")
 
     if event_id == state.last_event_id do
@@ -87,7 +91,6 @@ defmodule StoatGateway.Presence do
     else
       subscribers = :pg.get_members(:presence, state.user_id)
       Enum.each(subscribers, &send(&1, {:presence_update, payload}))
-      session_dispatch(payload, state)
       {:noreply, %{state | last_event_id: event_id}}
     end
   end
