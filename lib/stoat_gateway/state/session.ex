@@ -16,8 +16,8 @@ end
 defmodule StoatGateway.Session do
   use GenServer, restart: :temporary
   require Logger
-  # Arbitrary 30s timeout to resume
-  @socket_disconnect_timeout 30_000
+  # Arbitrary 20s timeout to resume
+  @socket_disconnect_timeout 20_000
 
   defstruct ready: false,
             user_id: nil,
@@ -223,11 +223,13 @@ defmodule StoatGateway.Session do
     {:noreply, state}
   end
 
-  def handle_info({:socket_dispatch, {_event, body}}, state) do
-    # TODO: Handle no socket here and holdon to events, upon max close session
-    send(state.linked_socket, {:event_dispatch_raw, body})
+  def handle_info({:socket_dispatch, {_event, body}}, %{linked_socket: socket}=state) when is_pid(socket) do
+    send(socket, {:event_dispatch_raw, body})
     {:noreply, state}
   end
+  
+  # TODO: Maybe buffer events?
+  def handle_info({:socket_dispatch, _}, state), do: {:noreply, state}
 
   # Dead WS handling
   def handle_info(
