@@ -76,9 +76,10 @@ defmodule StoatGateway.Presence do
     {:ok, state}
   end
 
-  def handle_info({:dm_event_dispatch, payload}, state) do
+  def handle_info({:dm_event_dispatch, {event, data} = payload}, state) do
     session_dispatch(payload, state)
-    {:noreply, state}
+    new_state = maybe_update_state(event, data, state)
+    {:noreply, new_state}
   end
 
   def handle_info(
@@ -97,8 +98,9 @@ defmodule StoatGateway.Presence do
     end
   end
 
-  def handle_info({:presence_event_dispatch, payload}, state) do
+  def handle_info({:presence_event_dispatch, {event, data} = payload}, state) do
     session_dispatch(payload, state)
+    new_state = maybe_update_state(event, data, state)
     {:noreply, state}
   end
 
@@ -124,6 +126,12 @@ defmodule StoatGateway.Presence do
       _ -> {:noreply, %{state | sessions: new_sessions}}
     end
   end
+
+  defp maybe_update_state(:UserRelationship, _, state) do
+    state
+  end
+
+  defp maybe_update_state(_, _, state), do: state
 
   defp ensure_gdm_subscriptions(channels) do
     Enum.each(channels, fn %{"_id" => channel} ->
