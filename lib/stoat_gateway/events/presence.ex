@@ -6,6 +6,7 @@ defmodule StoatGateway.Presence do
   """
   use GenServer, restart: :transient
   require Logger
+  @maximum_previous_presences 25
 
   defstruct user_id: nil,
             dm_channels: [],
@@ -13,7 +14,8 @@ defmodule StoatGateway.Presence do
             sessions: [],
             current_presence: nil,
             current_status: %{},
-            last_event_id: 0
+            last_event_id: 0,
+            previous_presences: []
 
   def start_link(%{user_id: user_id} = state) do
     GenServer.start_link(__MODULE__, state, name: {:via, Registry, {Stoat.Presence, user_id}})
@@ -100,9 +102,18 @@ defmodule StoatGateway.Presence do
     {:noreply, state}
   end
 
-  def handle_info({:presence_update, payload}, state) do
-    session_dispatch(payload, state)
-    {:noreply, state}
+  def handle_info(
+        {:presence_update, {_, %{"event_id" => event_id}} = payload},
+        %{previous_presences: event_ids} = state
+      ) do
+    case Enum.member?(event_ids, event_id) do
+      true ->
+        {:noreply, state}
+
+      _ ->
+        session_dispatch(payload, state)
+        {:noreply, %{state | previous_presences: ensure_presences_size([event_id | event_ids])}}
+    end
   end
 
   def handle_info({:DOWN, ref, :process, _pid, _}, state) do
@@ -140,6 +151,12 @@ defmodule StoatGateway.Presence do
   def terminate(_, state) do
     Redix.command(:redix, ["SREM", "online", state.user_id])
   end
+
+  defp ensure_presences_size(presences) when length(presences) > @maximum_previous_presences do
+    Enum.slice(presences, 0, @maximum_previous_presences)
+  end
+
+  defp ensure_presences_size(presences), do: presences
 
   def code_change(_old_vsn, state, _extra), do: {:ok, state}
 end
