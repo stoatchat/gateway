@@ -9,8 +9,8 @@ defmodule StoatGateway.Presence do
   @maximum_previous_presences 25
 
   defstruct user_id: nil,
-            dm_channels: [],
-            relationships: [],
+            dm_channels: %{},
+            relationships: %{},
             sessions: [],
             current_presence: nil,
             current_status: %{},
@@ -24,8 +24,9 @@ defmodule StoatGateway.Presence do
   def supervised_start(id, dm_channels, relationships) do
     state = %__MODULE__{
       user_id: id,
-      dm_channels: dm_channels,
-      relationships: relationships
+      dm_channels:
+        dm_channels |> Enum.into(%{}, fn %{"_id" => id} = channel -> {id, channel} end),
+      relationships: relationships |> Enum.into(%{}, fn %{"_id" => id} = user -> {id, user} end)
     }
 
     DynamicSupervisor.start_child(Stoat.Presence.Supervisor, {StoatGateway.Presence, state})
@@ -101,7 +102,7 @@ defmodule StoatGateway.Presence do
   def handle_info({:presence_event_dispatch, {event, data} = payload}, state) do
     session_dispatch(payload, state)
     new_state = maybe_update_state(event, data, state)
-    {:noreply, state}
+    {:noreply, new_state}
   end
 
   def handle_info(
@@ -127,20 +128,37 @@ defmodule StoatGateway.Presence do
     end
   end
 
-  defp maybe_update_state(:UserRelationship, _, state) do
-    state
+  defp maybe_update_state(
+         :UserRelationship,
+         %{"user" => %{"relationship" => "None", "_id" => user_id}},
+         state
+       ) do
+    # Unsubscribe to presence
+    :pg.leave(:presence, user_id, self())
+    relationships = Map.filter(state.relationships, fn {friend_id, _} -> friend_id != user_id end)
+    %{state | relationships: relationships}
+  end
+
+  defp maybe_update_state(
+         :UserRelationship,
+         %{"user" => %{"relationship" => "Friend", "_id" => user_id} = data},
+         state
+       ) do
+    :pg.join(:presence, user_id, self())
+    relationships = Map.put(state.relationships, user_id, data)
+    %{state | relationships: relationships}
   end
 
   defp maybe_update_state(_, _, state), do: state
 
   defp ensure_gdm_subscriptions(channels) do
-    Enum.each(channels, fn %{"_id" => channel} ->
-      :pg.join(:gdm_channels, channel, self())
+    Enum.each(Map.keys(channels), fn channel_id ->
+      :pg.join(:gdm_channels, channel_id, self())
     end)
   end
 
   defp ensure_friend_subscriptions(relationships) do
-    Enum.each(relationships, fn %{"_id" => friend_id, "status" => status} ->
+    Enum.each(relationships, fn {friend_id, %{"status" => status}} ->
       case status do
         "Friend" -> :pg.join(:presence, friend_id, self())
         _ -> nil
