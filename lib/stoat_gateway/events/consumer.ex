@@ -95,9 +95,9 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("VoiceChannelLeave", data), do: handle_channel_event(:VoiceChannelLeave, data)
   def handle_event("VoiceChannelMove", data), do: handle_channel_event(:VoiceChannelMove, data)
 
-  def handle_event("WebookCreate", data), do: handle_channel_event(:WebhookCreate, data)
-  def handle_event("WebookUpdate", data), do: handle_channel_event(:WebhookUpdate, data)
-  def handle_event("WebookDelete", data), do: handle_channel_event(:WebhookDelete, data)
+  def handle_event("WebhookCreate", data), do: handle_channel_event(:WebhookCreate, data)
+  def handle_event("WebhookUpdate", data), do: handle_channel_event(:WebhookUpdate, data)
+  def handle_event("WebhookDelete", data), do: handle_channel_event(:WebhookDelete, data)
 
   def handle_event("UserVoiceStateUpdate", data),
     do: handle_channel_event(:UserVoiceStateUpdate, data)
