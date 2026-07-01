@@ -80,6 +80,7 @@ defmodule StoatGateway.Events.Consumer do
 
   def handle_event("ChannelUpdate", data), do: handle_channel_event(:ChannelUpdate, data)
   def handle_event("ChannelDelete", data), do: handle_channel_event(:ChannelDelete, data)
+  def handle_event("ChannelGroupLeave", data), do: handle_channel_event(:ChannelGroupleave, data)
 
   def handle_event("ChannelGroupJoin", %{"recipients" => recipients} = data) do
     Enum.each(recipients, fn user_id ->
@@ -90,10 +91,16 @@ defmodule StoatGateway.Events.Consumer do
     end)
   end
 
-  def handle_event("ChannelGroupLeave", data), do: handle_channel_event(:ChannelGroupleave, data)
-
   def handle_event("VoiceChannelJoin", data), do: handle_channel_event(:VoiceChannelJoin, data)
   def handle_event("VoiceChannelLeave", data), do: handle_channel_event(:VoiceChannelLeave, data)
+  def handle_event("VoiceChannelMove", data), do: handle_channel_event(:VoiceChannelMove, data)
+
+  def handle_event("WebookCreate", data), do: handle_channel_event(:WebhookCreate, data)
+  def handle_event("WebookUpdate", data), do: handle_channel_event(:WebhookUpdate, data)
+  def handle_event("WebookDelete", data), do: handle_channel_event(:WebhookDelete, data)
+
+  def handle_event("UserVoiceStateUpdate", data),
+    do: handle_channel_event(:UserVoiceStateUpdate, data)
 
   # Server scoped events
   def handle_event("ServerCreate", _data) do
@@ -111,12 +118,15 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("ServerRoleRanksUpdate", data),
     do: handle_server_event(:ServerRoleRanksUpdate, data)
 
+  def handle_event("EmojiCreate", data), do: handle_server_event(:EmojiCreate, data)
+  def handle_event("EmojiUpdate", data), do: handle_server_event(:EmojiUpdate, data)
+  def handle_event("EmojiDelete", data), do: handle_server_event(:EmojiDelete, data)
   # User scoped events
   #   Presence Events
 
   def handle_event("ChannelAck", data), do: handle_presence_event(:ChannelAck, data)
-
   def handle_event("UserUpdate", data), do: handle_presence_event(:UserUpdate, data)
+  def handle_event("UserSlowmodes", data), do: handle_presence_event(:UserSlowmodes, data)
 
   def handle_event("UserSettingsUpdate", data),
     do: handle_presence_event(:UserSettingsUpdate, data)
@@ -146,6 +156,11 @@ defmodule StoatGateway.Events.Consumer do
   def is_channel_event?(:ChannelStopTyping), do: true
   def is_channel_event?(:VoiceChannelJoin), do: true
   def is_channel_event?(:VoiceChannelLeave), do: true
+  def is_channel_event?(:VoiceChannelMove), do: true
+  def is_channel_event?(:UserVoiceStateUpdate), do: true
+  def is_channel_event?(:WebhookCreate), do: true
+  def is_channel_event?(:WebhookUpdate), do: true
+  def is_channel_event?(:WebhookDelete), do: true
   def is_channel_event?(_), do: false
 
   defp handle_channel_event(event, {channel_id, data}) do
