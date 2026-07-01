@@ -78,11 +78,19 @@ defmodule StoatGateway.Events.Consumer do
 
   def handle_event("BulkMessageDelete", data), do: handle_channel_event(:BulkMessageDelete, data)
 
+  # Match against server channels
+  def handle_event("ChannelCreate", {_, %{"server" => _server_id}} = data) do
+    handle_server_event(:ChannelCreate, data)
+  end
+
+  # NOTE: DM channel creation
+  def handle_event("ChannelCreate", data), do: handle_presence_event(:ChannelCreate, data)
+
   def handle_event("ChannelUpdate", data), do: handle_channel_event(:ChannelUpdate, data)
   def handle_event("ChannelDelete", data), do: handle_channel_event(:ChannelDelete, data)
   def handle_event("ChannelGroupLeave", data), do: handle_channel_event(:ChannelGroupleave, data)
 
-  def handle_event("ChannelGroupJoin", %{"recipients" => recipients} = data) do
+  def handle_event("ChannelGroupJoin", {_, %{"recipients" => recipients} = data}) do
     Enum.each(recipients, fn user_id ->
       case StoatGateway.Presence.lookup(user_id) do
         {:ok, pid} -> send(pid, {:presence_event_dispatch, {:ChannelGroupJoin, data}})

@@ -149,6 +149,16 @@ defmodule StoatGateway.Presence do
     %{state | relationships: relationships}
   end
 
+  defp maybe_update_state(:ChannelCreate, %{"_id" => channel_id} = data, state) do
+    :pg.join(:gdm_channels, channel_id, self())
+    state
+  end
+
+  defp maybe_update_state(:ChannelDelete, %{"_id" => channel_id}, state) do
+    :pg.leave(:gdm_channels, channel_id, self())
+    state
+  end
+
   defp maybe_update_state(_, _, state), do: state
 
   defp ensure_gdm_subscriptions(channels) do
