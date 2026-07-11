@@ -59,7 +59,7 @@ defmodule StoatGateway.Web.SocketHandler do
         %{"channel" => channel_id} = _payload,
         %{ready: true} = state
       ) do
-    GenServer.cast(state.linked_socket, {:event_begin_typing, channel_id})
+    GenServer.cast(state.linked_socket, {:event_typing, :ChannelStartTyping, channel_id})
     {:ok, state}
   end
 
@@ -68,7 +68,7 @@ defmodule StoatGateway.Web.SocketHandler do
         %{"channel" => channel_id} = _payload,
         %{ready: true} = state
       ) do
-    GenServer.cast(state.linked_socket, {:event_stop_typing, channel_id})
+        GenServer.cast(state.linked_socket, {:event_typing, :ChannelStopTyping, channel_id})
     {:ok, state}
   end
 

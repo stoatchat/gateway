@@ -189,35 +189,19 @@ defmodule StoatGateway.Session do
     {:noreply, %{state | linked_presence: presence_pid}}
   end
 
-  def handle_cast({:event_begin_typing, channel_id}, state) do
+  def handle_cast({:event_typing, event, channel_id}, state) do
     # we can then move more state onto the server process and calculate it all there?
     # benefit would be less state everywhere and the server can probably cache all of this
     case Enum.find(state.channels, fn %{"_id" => id} -> id == channel_id end) do
       %{"server" => server_id} ->
         case Enum.find(state.linked_servers, fn {id, _, _} -> id == server_id end) do
-          {_, pid, _} -> GenServer.cast(pid, {:dispatch_begin_typing, channel_id, state.user_id})
+          {_, pid, _} -> GenServer.cast(pid, {:dispatch_typing, event, channel_id, state.user_id})
           _ -> nil
         end
-
-      # TODO: We'll use Presence to fanout DM typing events
+      
+      # NOTE: GDM typing
       _ ->
-        nil
-    end
-
-    {:noreply, state}
-  end
-
-  def handle_cast({:event_stop_typing, channel_id}, state) do
-    case Enum.find(state.channels, fn %{"_id" => id} -> id == channel_id end) do
-      %{"server" => server_id} ->
-        case Enum.find(state.linked_servers, fn {id, _, _} -> id == server_id end) do
-          {_, pid, _} -> GenServer.cast(pid, {:dispatch_stop_typing, channel_id, state.user_id})
-          _ -> nil
-        end
-
-      # TODO: We'll use Presence to fanout DM typing events
-      _ ->
-        nil
+        GenServer.cast(state.linked_presence, {:dispatch_typing, event, channel_id })
     end
 
     {:noreply, state}

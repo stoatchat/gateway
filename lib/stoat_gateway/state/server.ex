@@ -82,21 +82,11 @@ defmodule StoatGateway.Server do
 
   # TODO: probably want a general dispatch catch and then another func for specific topics
   # say channel, overall
-  def handle_cast({:dispatch_begin_typing, channel_id, user_id}, state) do
+  def handle_cast({:dispatch_typing, event, channel_id, user_id}, state) do
     GenServer.cast(
       self(),
-      {:dispatch, :ChannelStartTyping,
-       %{type: "ChannelStartTyping", id: channel_id, user: user_id}}
-    )
-
-    Logger.debug("server:#{inspect(self())} dispatching typing by #{user_id} to #{channel_id}")
-    {:noreply, state}
-  end
-
-  def handle_cast({:dispatch_stop_typing, channel_id, user_id}, state) do
-    GenServer.cast(
-      self(),
-      {:dispatch, :ChannelStopTyping, %{type: "ChannelStopTyping", id: channel_id, user: user_id}}
+      {:dispatch, event,
+       %{type: Atom.to_string(event), id: channel_id, user: user_id}}
     )
 
     Logger.debug("server:#{inspect(self())} dispatching typing by #{user_id} to #{channel_id}")

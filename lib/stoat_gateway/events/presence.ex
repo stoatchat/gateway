@@ -68,6 +68,16 @@ defmodule StoatGateway.Presence do
     {:noreply, %{state | sessions: [session | state.sessions], current_status: status}}
   end
 
+  def handle_cast({:dispatch_typing, event, channel_id}, state) do
+    StoatGateway.Events.Consumer.handle_dm_event(event, channel_id, %{
+      type: Atom.to_string(event),
+      id: channel_id,
+      user: state.user_id
+    })
+
+    {:noreply, state}
+  end
+
   def handle_call(:fetch_presence_status, _from, state) do
     # NOTE: potential hot-path, calls could fail in a thundering herde scenario but unlikely
     {:reply, {true, state.current_status}, state}
