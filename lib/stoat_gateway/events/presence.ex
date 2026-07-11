@@ -80,7 +80,7 @@ defmodule StoatGateway.Presence do
   def handle_info({:presence_server_create, {server_id, pid}}, state) do
     # NOTE: maybe tie-into existing socket dispatch and send an event in the future?
     Enum.each(state.sessions, &send(&1.pid, {:event_server_create, server_id, pid}))
-    {:ok, state}
+    {:noreply, state}
   end
 
   def handle_info({:dm_event_dispatch, {event, data} = payload}, state) do
