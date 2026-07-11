@@ -80,8 +80,6 @@ defmodule StoatGateway.Server do
     {:noreply, new_state}
   end
 
-  # TODO: probably want a general dispatch catch and then another func for specific topics
-  # say channel, overall
   def handle_cast({:dispatch_typing, event, channel_id, user_id}, state) do
     GenServer.cast(
       self(),
@@ -302,7 +300,6 @@ defmodule StoatGateway.Server do
     Enum.each(sessions, &send(&1.pid, {:socket_dispatch, event}))
   end
 
-  # TODO: Perhaps presence logic can change to avoid this tomfoolery
   defp user_session_exists?(user, sessions) do
     Enum.any?(sessions, fn session ->
       user == session.user_id

@@ -59,7 +59,6 @@ defmodule Stoat.Permissions.Bits do
 end
 
 defmodule Stoat.Permissions do
-  # TODO(twitch): unsure why but i'm just not happy with any of this lol
   # Essentially an impl of https://github.com/stoatchat/for-android/blob/dev/app/src/main/java/chat/stoat/api/internals/Roles.kt#L75
   def filter_inaccessible_channels(channels, servers, members, user_id) do
     Enum.filter(channels, fn channel ->

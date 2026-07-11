@@ -66,7 +66,6 @@ defmodule StoatGateway.Session do
   end
 
   def init(state) do
-    # TODO: Add metrics here for connected session 
     Logger.debug("session: init self: #{inspect(self())} with state: #{inspect(state)}")
     Process.monitor(state.linked_socket)
     Registry.register(Stoat.Sessions, state.user_id, state.session)
@@ -198,10 +197,10 @@ defmodule StoatGateway.Session do
           {_, pid, _} -> GenServer.cast(pid, {:dispatch_typing, event, channel_id, state.user_id})
           _ -> nil
         end
-      
+
       # NOTE: GDM typing
       _ ->
-        GenServer.cast(state.linked_presence, {:dispatch_typing, event, channel_id })
+        GenServer.cast(state.linked_presence, {:dispatch_typing, event, channel_id})
     end
 
     {:noreply, state}
@@ -213,7 +212,7 @@ defmodule StoatGateway.Session do
     {:noreply, state}
   end
 
-  # TODO: Maybe buffer events?
+  # NOTE: SessionResume in future we'll buffer events here
   def handle_info({:socket_dispatch, _}, state), do: {:noreply, state}
 
   def handle_info({:event_server_create, {id, pid}}, state) do
@@ -221,6 +220,7 @@ defmodule StoatGateway.Session do
       pid,
       {:session_link_async, state.session, state.type, state.user_id, self(), %{"roles" => []}}
     )
+
     ref = Process.monitor(pid)
 
     %{state | linked_servers: [{id, pid, ref} | state.linked_servers]}
@@ -231,7 +231,6 @@ defmodule StoatGateway.Session do
         {:DOWN, _ref, :process, pid, _},
         %__MODULE__{:linked_socket => socket_pid} = state
       ) do
-    # TODO(twitch): Check for ref to a linked server
     if pid == socket_pid do
       # Websocket has disconnected- go into a no-forwarding mode until we timeout or have a new session
       Logger.debug(
@@ -267,9 +266,6 @@ defmodule StoatGateway.Session do
           _ -> {false, %{}}
         end
 
-      # TODO: Fetch presence from ETS before v2?
-      # Rearrange this flow in v2 to lazyload like server_session_link
-      # Until then: fire presence update on connect?
       build_ready_user(user, relation_status, presence)
     end)
   end
