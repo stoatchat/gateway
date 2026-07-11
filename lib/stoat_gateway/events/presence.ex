@@ -102,7 +102,6 @@ defmodule StoatGateway.Presence do
 
   def handle_info({:presence_event_dispatch, {event, data} = payload}, state) do
     Logger.debug("presence: event_dispatch -> #{inspect(event)}#{inspect(data)}")
-    new_state = maybe_update_state(event, data, state)
     session_dispatch(payload, state)
     new_state = maybe_update_state(event, data, state)
     {:noreply, new_state}
