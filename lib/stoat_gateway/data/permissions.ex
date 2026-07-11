@@ -160,6 +160,10 @@ defmodule Stoat.Permissions do
     end)
   end
 
+  def permissions_for_member(_member, server) do
+      Map.get(server, "default_permissions", Stoat.Permissions.Bits.server_default())
+  end
+
   defp calculate_final_permissions(default, roles) when length(roles) > 0,
     do: default || Enum.max(roles)
 
