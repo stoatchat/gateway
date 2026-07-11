@@ -215,7 +215,7 @@ defmodule StoatGateway.Session do
   # NOTE: SessionResume in future we'll buffer events here
   def handle_info({:socket_dispatch, _}, state), do: {:noreply, state}
 
-  def handle_info({:event_server_create, {id, pid}}, state) do
+  def handle_info({:event_server_create, id, pid}, state) do
     GenServer.cast(
       pid,
       {:session_link_async, state.session, state.type, state.user_id, self(), %{"roles" => []}}
@@ -223,7 +223,7 @@ defmodule StoatGateway.Session do
 
     ref = Process.monitor(pid)
 
-    %{state | linked_servers: [{id, pid, ref} | state.linked_servers]}
+    {:noreply, %{state | linked_servers: [{id, pid, ref} | state.linked_servers]}}
   end
 
   # Dead WS handling

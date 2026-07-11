@@ -126,7 +126,12 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("ServerDelete", data), do: handle_server_event(:ServerDelete, data)
   def handle_event("ServerMemberUpdate", data), do: handle_server_event(:ServerMemberUpdate, data)
   def handle_event("ServerMemberJoin", data), do: handle_server_event(:ServerMemberJoin, data)
-  def handle_event("ServerMemberLeave", data), do: handle_server_event(:ServerMemberLeave, data)
+
+  def handle_event("ServerMemberLeave", {_, %{"user" => user_id}=payload}=data) do
+    handle_server_event(:ServerMemberLeave, data)
+    handle_presence_event(:ServerMemberLeave, {user_id, payload})
+  end
+
   def handle_event("ServerRoleUpdate", data), do: handle_server_event(:ServerRoleUpdate, data)
   def handle_event("ServerRoleDelete", data), do: handle_server_event(:ServerRoleDelete, data)
 

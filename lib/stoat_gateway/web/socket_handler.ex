@@ -116,6 +116,12 @@ defmodule StoatGateway.Web.SocketHandler do
     {:ok, state}
   end
 
+  @impl true
+  def terminate({:error, reason}, state) do
+    Logger.warning("Closing socket with error: #{inspect(reason)}")
+    {:ok, state}
+  end
+
   defp handle_auth(token, format) do
     with {type, data} <- StoatGateway.Auth.find_by_token(token) do
       # NOTE: replace this with lookup for SessionResume in the future
