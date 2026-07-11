@@ -20,10 +20,13 @@ defmodule StoatGateway.Server do
         {:ok, server_pid}
 
       _ ->
-        DynamicSupervisor.start_child(
-          Stoat.Servers.Supervisor,
-          {StoatGateway.Server, %{id: id}}
-        )
+        case DynamicSupervisor.start_child(
+               Stoat.Servers.Supervisor,
+               {StoatGateway.Server, %{id: id}}
+             ) do
+          {:ok, pid} -> {:ok, pid}
+          {:error, {:already_started, pid}} -> {:ok, pid}
+        end
     end
   end
 

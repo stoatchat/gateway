@@ -223,13 +223,24 @@ defmodule StoatGateway.Session do
     {:noreply, state}
   end
 
-  def handle_info({:socket_dispatch, {_event, body}}, %{linked_socket: socket}=state) when is_pid(socket) do
+  def handle_info({:socket_dispatch, {_event, body}}, %{linked_socket: socket} = state)
+      when is_pid(socket) do
     send(socket, {:event_dispatch_raw, body})
     {:noreply, state}
   end
-  
+
   # TODO: Maybe buffer events?
   def handle_info({:socket_dispatch, _}, state), do: {:noreply, state}
+
+  def handle_info({:event_server_create, {id, pid}}, state) do
+    GenServer.cast(
+      pid,
+      {:session_link_async, state.session, state.type, state.user_id, self(), %{"roles" => []}}
+    )
+    ref = Process.monitor(pid)
+
+    %{state | linked_servers: [{id, pid, ref} | state.linked_servers]}
+  end
 
   # Dead WS handling
   def handle_info(
