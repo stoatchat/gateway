@@ -16,8 +16,8 @@ end
 defmodule StoatGateway.Session do
   use GenServer, restart: :temporary
   require Logger
-  # Arbitrary 30s timeout to resume
-  @socket_disconnect_timeout 30_000
+  # Arbitrary 20s timeout to resume
+  @socket_disconnect_timeout 20_000
 
   defstruct ready: false,
             user_id: nil,
@@ -66,7 +66,6 @@ defmodule StoatGateway.Session do
   end
 
   def init(state) do
-    # TODO: Add metrics here for connected session 
     Logger.debug("session: init self: #{inspect(self())} with state: #{inspect(state)}")
     Process.monitor(state.linked_socket)
     Registry.register(Stoat.Sessions, state.user_id, state.session)
@@ -189,44 +188,42 @@ defmodule StoatGateway.Session do
     {:noreply, %{state | linked_presence: presence_pid}}
   end
 
-  def handle_cast({:event_begin_typing, channel_id}, state) do
+  def handle_cast({:event_typing, event, channel_id}, state) do
     # we can then move more state onto the server process and calculate it all there?
     # benefit would be less state everywhere and the server can probably cache all of this
     case Enum.find(state.channels, fn %{"_id" => id} -> id == channel_id end) do
       %{"server" => server_id} ->
         case Enum.find(state.linked_servers, fn {id, _, _} -> id == server_id end) do
-          {_, pid, _} -> GenServer.cast(pid, {:dispatch_begin_typing, channel_id, state.user_id})
+          {_, pid, _} -> GenServer.cast(pid, {:dispatch_typing, event, channel_id, state.user_id})
           _ -> nil
         end
 
-      # TODO: We'll use Presence to fanout DM typing events
+      # NOTE: GDM typing
       _ ->
-        nil
+        GenServer.cast(state.linked_presence, {:dispatch_typing, event, channel_id})
     end
 
     {:noreply, state}
   end
 
-  def handle_cast({:event_stop_typing, channel_id}, state) do
-    case Enum.find(state.channels, fn %{"_id" => id} -> id == channel_id end) do
-      %{"server" => server_id} ->
-        case Enum.find(state.linked_servers, fn {id, _, _} -> id == server_id end) do
-          {_, pid, _} -> GenServer.cast(pid, {:dispatch_stop_typing, channel_id, state.user_id})
-          _ -> nil
-        end
-
-      # TODO: We'll use Presence to fanout DM typing events
-      _ ->
-        nil
-    end
-
+  def handle_info({:socket_dispatch, {_event, body}}, %{linked_socket: socket} = state)
+      when is_pid(socket) do
+    send(socket, {:event_dispatch_raw, body})
     {:noreply, state}
   end
 
-  def handle_info({:socket_dispatch, {_event, body}}, state) do
-    # TODO: Handle no socket here and holdon to events, upon max close session
-    send(state.linked_socket, {:event_dispatch_raw, body})
-    {:noreply, state}
+  # NOTE: SessionResume in future we'll buffer events here
+  def handle_info({:socket_dispatch, _}, state), do: {:noreply, state}
+
+  def handle_info({:event_server_create, id, pid}, state) do
+    GenServer.cast(
+      pid,
+      {:session_link_async, state.session, state.type, state.user_id, self(), %{"roles" => []}}
+    )
+
+    ref = Process.monitor(pid)
+
+    {:noreply, %{state | linked_servers: [{id, pid, ref} | state.linked_servers]}}
   end
 
   # Dead WS handling
@@ -234,7 +231,6 @@ defmodule StoatGateway.Session do
         {:DOWN, _ref, :process, pid, _},
         %__MODULE__{:linked_socket => socket_pid} = state
       ) do
-    # TODO(twitch): Check for ref to a linked server
     if pid == socket_pid do
       # Websocket has disconnected- go into a no-forwarding mode until we timeout or have a new session
       Logger.debug(
@@ -266,13 +262,13 @@ defmodule StoatGateway.Session do
 
       presence =
         case StoatGateway.Presence.lookup(id) do
-          {:ok, pid} -> GenServer.call(pid, :fetch_presence_status)
-          _ -> {false, %{}}
+          {:ok, pid} ->
+            GenServer.call(pid, :fetch_presence_status)
+
+          {:error, _} ->
+            {false, %{}}
         end
 
-      # TODO: Fetch presence from ETS before v2?
-      # Rearrange this flow in v2 to lazyload like server_session_link
-      # Until then: fire presence update on connect?
       build_ready_user(user, relation_status, presence)
     end)
   end
@@ -369,7 +365,8 @@ defmodule StoatGateway.Session do
   end
 
   # Clean-up important state
-  def terminate(_reason, state), do: Registry.unregister(Stoat.Sessions, state.user_id)
+  def terminate(_reason, state),
+    do: Registry.unregister_match(Stoat.Sessions, state.user_id, state.session)
 
   def code_change(_old_vsn, state, _extra), do: {:ok, state}
 end

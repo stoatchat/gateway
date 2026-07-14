@@ -20,10 +20,13 @@ defmodule StoatGateway.Server do
         {:ok, server_pid}
 
       _ ->
-        DynamicSupervisor.start_child(
-          Stoat.Servers.Supervisor,
-          {StoatGateway.Server, %{id: id}}
-        )
+        case DynamicSupervisor.start_child(
+               Stoat.Servers.Supervisor,
+               {StoatGateway.Server, %{id: id}}
+             ) do
+          {:ok, pid} -> {:ok, pid}
+          {:error, {:already_started, pid}} -> {:ok, pid}
+        end
     end
   end
 
@@ -77,23 +80,11 @@ defmodule StoatGateway.Server do
     {:noreply, new_state}
   end
 
-  # TODO: probably want a general dispatch catch and then another func for specific topics
-  # say channel, overall
-  def handle_cast({:dispatch_begin_typing, channel_id, user_id}, state) do
+  def handle_cast({:dispatch_typing, event, channel_id, user_id}, state) do
     GenServer.cast(
       self(),
-      {:dispatch, :ChannelStartTyping,
-       %{type: "ChannelStartTyping", id: channel_id, user: user_id}}
-    )
-
-    Logger.debug("server:#{inspect(self())} dispatching typing by #{user_id} to #{channel_id}")
-    {:noreply, state}
-  end
-
-  def handle_cast({:dispatch_stop_typing, channel_id, user_id}, state) do
-    GenServer.cast(
-      self(),
-      {:dispatch, :ChannelStopTyping, %{type: "ChannelStopTyping", id: channel_id, user: user_id}}
+      {:dispatch, event,
+       %{type: Atom.to_string(event), id: channel_id, user: user_id}}
     )
 
     Logger.debug("server:#{inspect(self())} dispatching typing by #{user_id} to #{channel_id}")
@@ -309,7 +300,6 @@ defmodule StoatGateway.Server do
     Enum.each(sessions, &send(&1.pid, {:socket_dispatch, event}))
   end
 
-  # TODO: Perhaps presence logic can change to avoid this tomfoolery
   defp user_session_exists?(user, sessions) do
     Enum.any?(sessions, fn session ->
       user == session.user_id

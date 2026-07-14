@@ -59,7 +59,6 @@ defmodule Stoat.Permissions.Bits do
 end
 
 defmodule Stoat.Permissions do
-  # TODO(twitch): unsure why but i'm just not happy with any of this lol
   # Essentially an impl of https://github.com/stoatchat/for-android/blob/dev/app/src/main/java/chat/stoat/api/internals/Roles.kt#L75
   def filter_inaccessible_channels(channels, servers, members, user_id) do
     Enum.filter(channels, fn channel ->
@@ -158,6 +157,10 @@ defmodule Stoat.Permissions do
 
       Bitwise.bor(acc, calculate_permissions(permissions))
     end)
+  end
+
+  def permissions_for_member(_member, server) do
+      Map.get(server, "default_permissions", Stoat.Permissions.Bits.server_default())
   end
 
   defp calculate_final_permissions(default, roles) when length(roles) > 0,

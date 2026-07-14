@@ -31,7 +31,6 @@ defmodule StoatGateway.Web.SocketHandler do
       {:ok, %{"type" => type} = payload} ->
         handle_payload(String.downcase(type), payload, state)
 
-      # TODO: Correct error format
       _ ->
         {:stop, :normal, 1007,
          build_error(
@@ -59,7 +58,7 @@ defmodule StoatGateway.Web.SocketHandler do
         %{"channel" => channel_id} = _payload,
         %{ready: true} = state
       ) do
-    GenServer.cast(state.linked_socket, {:event_begin_typing, channel_id})
+    GenServer.cast(state.linked_socket, {:event_typing, :ChannelStartTyping, channel_id})
     {:ok, state}
   end
 
@@ -68,7 +67,7 @@ defmodule StoatGateway.Web.SocketHandler do
         %{"channel" => channel_id} = _payload,
         %{ready: true} = state
       ) do
-    GenServer.cast(state.linked_socket, {:event_stop_typing, channel_id})
+        GenServer.cast(state.linked_socket, {:event_typing, :ChannelStopTyping, channel_id})
     {:ok, state}
   end
 
@@ -117,9 +116,15 @@ defmodule StoatGateway.Web.SocketHandler do
     {:ok, state}
   end
 
+  @impl true
+  def terminate({:error, reason}, state) do
+    Logger.warning("Closing socket with error: #{inspect(reason)}")
+    {:ok, state}
+  end
+
   defp handle_auth(token, format) do
     with {type, data} <- StoatGateway.Auth.find_by_token(token) do
-      # TODO: Lookup
+      # NOTE: replace this with lookup for SessionResume in the future
       {:ok, socket_pid} =
         DynamicSupervisor.start_child(
           Stoat.Sessions.Supervisor,

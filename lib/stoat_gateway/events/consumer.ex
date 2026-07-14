@@ -11,7 +11,7 @@ defmodule StoatGateway.Events.Consumer do
            connection: Application.get_env(:stoat_gateway, :rabbit),
            queue: "internal.event",
            metadata: [:headers],
-           declare: [{:exclusive, true}],
+           declare: [{:durable, true}],
            bindings: [
              {"revolt.default", [{:routing_key, "internal.event"}]}
            ],
@@ -33,12 +33,12 @@ defmodule StoatGateway.Events.Consumer do
     |> Broadway.Message.update_data(&decode_message!/1)
     |> process_message()
   end
-  
-  # TODO: Figure out a way to parse the channels such as `uid!` etc. etc.
+
   defp process_message(
-         %Broadway.Message{data: {:ok, data}, metadata: %{headers: [{"c", _, channel}]}} = message
+         %Broadway.Message{data: {:ok, data}, metadata: %{headers: [{"c", _, route_key}]}} =
+           message
        ) do
-    process_event(data, channel)
+    process_event(data, route_key)
     message
   end
 
@@ -49,19 +49,20 @@ defmodule StoatGateway.Events.Consumer do
   end
 
   # NOTE: We use the `c` header in RMQ to match the intended channel from Delta
-  def process_event(%{"type" => event_type} = data, channel) do
+  def process_event(%{"type" => event_type} = data, route_key) do
     # TODO: wrap telemetry and otel context around this
-    # Can also add future pushnotif decisions here?
-    Logger.debug("consumer: channel header: #{inspect(channel)} for event #{event_type}")
-    handle_event(event_type, data)
+    #Logger.debug("consumer: channel header: #{inspect(route_key)} for event #{event_type}")
+    # TODO: Hack-fix, i hate this whole handling
+    # perhaps we can get a type header and just route events based on that
+    handle_event(event_type, {route_key, data})
   end
 
   # Custom logic to pattern handle messages in servers & dm channels
-  def handle_event("Message", %{"member" => %{"_id" => %{"server" => server_id}}} = data) do
+  def handle_event("Message", {_, %{"member" => %{"_id" => %{"server" => server_id}}} = data}) do
     server_fanout(server_id, {:Message, data})
   end
 
-  def handle_event("Message", %{"channel" => channel_id} = data) do
+  def handle_event("Message", {_, %{"channel" => channel_id} = data}) do
     handle_dm_event(:Message, channel_id, data)
   end
 
@@ -77,35 +78,75 @@ defmodule StoatGateway.Events.Consumer do
 
   def handle_event("BulkMessageDelete", data), do: handle_channel_event(:BulkMessageDelete, data)
 
+  # Match against server channels
+  def handle_event("ChannelCreate", {_, %{"server" => _server_id}} = data) do
+    handle_server_event(:ChannelCreate, data)
+  end
+
+  # NOTE: DM channel creation
+  def handle_event("ChannelCreate", data), do: handle_presence_event(:ChannelCreate, data)
+
   def handle_event("ChannelUpdate", data), do: handle_channel_event(:ChannelUpdate, data)
   def handle_event("ChannelDelete", data), do: handle_channel_event(:ChannelDelete, data)
   def handle_event("ChannelGroupLeave", data), do: handle_channel_event(:ChannelGroupleave, data)
 
+  def handle_event("ChannelGroupJoin", {_, %{"recipients" => recipients} = data}) do
+    Enum.each(recipients, fn user_id ->
+      case StoatGateway.Presence.lookup(user_id) do
+        {:ok, pid} -> send(pid, {:presence_event_dispatch, {:ChannelGroupJoin, data}})
+        _ -> nil
+      end
+    end)
+  end
+
   def handle_event("VoiceChannelJoin", data), do: handle_channel_event(:VoiceChannelJoin, data)
   def handle_event("VoiceChannelLeave", data), do: handle_channel_event(:VoiceChannelLeave, data)
+  def handle_event("VoiceChannelMove", data), do: handle_channel_event(:VoiceChannelMove, data)
+
+  def handle_event("WebhookCreate", data), do: handle_channel_event(:WebhookCreate, data)
+  def handle_event("WebhookUpdate", data), do: handle_channel_event(:WebhookUpdate, data)
+  def handle_event("WebhookDelete", data), do: handle_channel_event(:WebhookDelete, data)
+
+  def handle_event("UserVoiceStateUpdate", data),
+    do: handle_channel_event(:UserVoiceStateUpdate, data)
 
   # Server scoped events
-  def handle_event("ServerCreate", _data) do
-    # TODO: Start GenServer + Link with Owner Sessions
+  def handle_event("ServerCreate", {_, %{"id" => id, "server" => %{"owner" => owner_id}}}) do
+    # NOTE: Event gives us all the data so we need a different start_link pattern match
+    # NOTE: ServerMemberJoin likely starts the server so this is just to link the owner...
+    {_, server_pid} = StoatGateway.Server.lookup_or_start(id)
+
+    case StoatGateway.Presence.lookup(owner_id) do
+      {:ok, pid} -> send(pid, {:presence_server_create, {id, server_pid}})
+      _ -> nil
+    end
   end
 
   def handle_event("ServerUpdate", data), do: handle_server_event(:ServerUpdate, data)
   def handle_event("ServerDelete", data), do: handle_server_event(:ServerDelete, data)
   def handle_event("ServerMemberUpdate", data), do: handle_server_event(:ServerMemberUpdate, data)
   def handle_event("ServerMemberJoin", data), do: handle_server_event(:ServerMemberJoin, data)
-  def handle_event("ServerMemberLeave", data), do: handle_server_event(:ServerMemberLeave, data)
+
+  def handle_event("ServerMemberLeave", {_, %{"user" => user_id}=payload}=data) do
+    handle_server_event(:ServerMemberLeave, data)
+    handle_presence_event(:ServerMemberLeave, {user_id, payload})
+  end
+
   def handle_event("ServerRoleUpdate", data), do: handle_server_event(:ServerRoleUpdate, data)
   def handle_event("ServerRoleDelete", data), do: handle_server_event(:ServerRoleDelete, data)
 
   def handle_event("ServerRoleRanksUpdate", data),
     do: handle_server_event(:ServerRoleRanksUpdate, data)
 
+  def handle_event("EmojiCreate", data), do: handle_server_event(:EmojiCreate, data)
+  def handle_event("EmojiUpdate", data), do: handle_server_event(:EmojiUpdate, data)
+  def handle_event("EmojiDelete", data), do: handle_server_event(:EmojiDelete, data)
   # User scoped events
   #   Presence Events
 
   def handle_event("ChannelAck", data), do: handle_presence_event(:ChannelAck, data)
-
   def handle_event("UserUpdate", data), do: handle_presence_event(:UserUpdate, data)
+  def handle_event("UserSlowmodes", data), do: handle_presence_event(:UserSlowmodes, data)
 
   def handle_event("UserSettingsUpdate", data),
     do: handle_presence_event(:UserSettingsUpdate, data)
@@ -135,12 +176,16 @@ defmodule StoatGateway.Events.Consumer do
   def is_channel_event?(:ChannelStopTyping), do: true
   def is_channel_event?(:VoiceChannelJoin), do: true
   def is_channel_event?(:VoiceChannelLeave), do: true
+  def is_channel_event?(:VoiceChannelMove), do: true
+  def is_channel_event?(:UserVoiceStateUpdate), do: true
+  def is_channel_event?(:WebhookCreate), do: true
+  def is_channel_event?(:WebhookUpdate), do: true
+  def is_channel_event?(:WebhookDelete), do: true
   def is_channel_event?(_), do: false
 
-  defp handle_channel_event(event, data) do
-    channel_id = parse_channel_id(data)
+  defp handle_channel_event(event, {channel_id, data}) do
     # NOTE: Both ets tables so might slow things down
-    # in future we can move away from the redis pubsub baked architecture and include more in the event from delta
+    # Another RMQ header with destination type?
     case :ets.lookup(:channel_server_refs, channel_id) do
       [{_, server_id}] -> server_fanout(server_id, {event, data})
       _ -> handle_dm_event(event, channel_id, data)
@@ -155,18 +200,14 @@ defmodule StoatGateway.Events.Consumer do
     end)
   end
 
-  defp handle_presence_event(event, %{"id" => user_id} = data) do
+  defp handle_presence_event(event, {user_id, data}) do
     case StoatGateway.Presence.lookup(user_id) do
       {:ok, pid} -> send(pid, {:presence_event_dispatch, {event, data}})
       _ -> nil
     end
   end
 
-  def parse_server_id(%{"id" => %{"server" => server_id}}), do: server_id
-  def parse_server_id(%{"id" => server_id}), do: server_id
-
-  defp handle_server_event(event, data) do
-    server_id = parse_server_id(data)
+  defp handle_server_event(event, {server_id, data}) do
     server_fanout(server_id, {event, data})
   end
 
