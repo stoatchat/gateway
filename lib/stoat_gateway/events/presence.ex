@@ -112,6 +112,7 @@ defmodule StoatGateway.Presence do
     else
       subscribers = :pg.get_members(:presence, state.user_id)
       Enum.each(subscribers, &send(&1, {:presence_update, payload}))
+      state = maybe_update_state(:UserUpdate, data, state)
       {:noreply, %{state | last_event_id: event_id}}
     end
   end
@@ -178,6 +179,15 @@ defmodule StoatGateway.Presence do
     Logger.debug("presence: updating gdm subscriptions for channel: #{channel_id}")
     :pg.leave(:gdm_channels, channel_id, self())
     %{state | dm_channels: Map.delete(state.dm_channels, channel_id)}
+  end
+
+  # Update self-status for presence fetches in ready payload
+  defp maybe_update_state(:Userupdate, %{"data" => %{"status" => new_status}}, state) do
+    %{state | current_status: new_status}
+  end
+
+  defp maybe_update_state(:Userupdate, %{"clear" => ["StatusText"]}, state) do
+    %{state | current_status: Map.delete(state.current_status, "text")}
   end
 
   defp maybe_update_state(_, _, state), do: state

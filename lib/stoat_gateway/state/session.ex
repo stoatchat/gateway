@@ -262,8 +262,11 @@ defmodule StoatGateway.Session do
 
       presence =
         case StoatGateway.Presence.lookup(id) do
-          {:ok, pid} -> GenServer.call(pid, :fetch_presence_status)
-          _ -> {false, %{}}
+          {:ok, pid} ->
+            GenServer.call(pid, :fetch_presence_status)
+
+          {:error, _} ->
+            {false, %{}}
         end
 
       build_ready_user(user, relation_status, presence)
@@ -362,7 +365,8 @@ defmodule StoatGateway.Session do
   end
 
   # Clean-up important state
-  def terminate(_reason, state), do: Registry.unregister_match(Stoat.Sessions, state.user_id, state.session)
+  def terminate(_reason, state),
+    do: Registry.unregister_match(Stoat.Sessions, state.user_id, state.session)
 
   def code_change(_old_vsn, state, _extra), do: {:ok, state}
 end

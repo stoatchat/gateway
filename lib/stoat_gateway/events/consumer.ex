@@ -51,7 +51,7 @@ defmodule StoatGateway.Events.Consumer do
   # NOTE: We use the `c` header in RMQ to match the intended channel from Delta
   def process_event(%{"type" => event_type} = data, route_key) do
     # TODO: wrap telemetry and otel context around this
-    Logger.debug("consumer: channel header: #{inspect(route_key)} for event #{event_type}")
+    #Logger.debug("consumer: channel header: #{inspect(route_key)} for event #{event_type}")
     # TODO: Hack-fix, i hate this whole handling
     # perhaps we can get a type header and just route events based on that
     handle_event(event_type, {route_key, data})
