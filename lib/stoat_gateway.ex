@@ -22,8 +22,9 @@ defmodule StoatGateway do
        [name: :mongo_db, url: Application.get_env(:stoat_gateway, :mongodb), pool_size: 2]},
       {Redix, {Application.get_env(:stoat_gateway, :redis), [name: :redix]}},
       StoatGateway.Events.Consumer,
+      StoatGateway.Remote.Coordinator,
       {Cluster.Supervisor,
-       [Application.get_env(:libcluster, :topologies), [name: StoatGateway.ClusterSupervisor]]}
+        [Application.get_env(:libcluster, :topologies), [name: StoatGateway.ClusterSupervisor]]}
     ]
 
     opts = [strategy: :one_for_one, name: StoatGateway.Supervisor]

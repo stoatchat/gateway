@@ -11,19 +11,34 @@ defmodule StoatGateway.Remote.Coordinator do
   alias ExHashRing.Ring
   require Logger
   
-  @impl true 
-  def start_link(args) do
+  def start_link(state) do
+    GenServer.start_link(__MODULE__, state)
   end
 
   @impl true
-  def init() do
+  def init(_) do
+    :net_kernel.monitor_nodes(true)
+    {:ok, ring} = Ring.start_link(name: :test_ring)
+    Ring.add_node(ring, node())
+    {:ok, %{ring: ring}}
   end
   
   @impl true
-  def code_change() do
+  def handle_info({:nodeup, node}, state) do
+    Ring.add_node(state.ring, node)
+    {:noreply, state}
+  end
+  
+  @impl true
+  def handle_info({:nodedown, node}, state) do
+    Ring.remove_node(state.ring, node)
+    {:noreply, state}
   end
 
-  @impl true
+  def code_change(_old_vsn, state) do
+    {:ok, state}
+  end
+
   def terminate() do
   end
 end
