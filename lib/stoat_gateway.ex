@@ -19,7 +19,7 @@ defmodule StoatGateway do
        scheme: :http,
        port: Application.get_env(:stoat_gateway, :ws_port)},
       {Mongo,
-       [name: :mongo_db, url: Application.get_env(:stoat_gateway, :mongodb), pool_size: 2]},
+       [name: :mongo_db, url: Application.get_env(:stoat_gateway, :mongodb), database: "revolt", pool_size: 2]},
       {Redix, {Application.get_env(:stoat_gateway, :redis), [name: :redix]}},
       StoatGateway.Events.Consumer
     ]
