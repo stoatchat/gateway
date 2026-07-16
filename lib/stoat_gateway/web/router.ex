@@ -5,7 +5,7 @@ defmodule StoatGateway.Web.Router do
   plug(:match)
   plug(:dispatch)
 
-  get "/ws" do
+  get "/" do
     upgrade_header = get_req_header(conn, "upgrade")
 
     case upgrade_header do
