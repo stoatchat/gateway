@@ -71,12 +71,12 @@ defmodule StoatGateway.Web.SocketHandler do
     {:ok, state}
   end
 
-  def handle_payload(_, %{ready: false} = state) do
+  def handle_payload(_, _, %{ready: false} = state) do
     {:stop, :normal, 1007, build_error("InvalidSession", "Not Authenticated", state.format),
      state}
   end
 
-  def handle_payload(_, state) do
+  def handle_payload(_, _, state) do
     {:stop, :normal, 1007, build_error("InvalidPayload", state.format), state}
   end
 
