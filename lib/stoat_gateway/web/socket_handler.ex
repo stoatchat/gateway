@@ -93,7 +93,13 @@ defmodule StoatGateway.Web.SocketHandler do
   @behaviour WebSock
 
   defstruct ready: false, format: :json, linked_socket: nil, ready_fields: %ReadyFields{}
-  @type t :: %__MODULE__{ready: boolean(), format: String.t(), linked_socket: pid(), ready_fields: ReadyFields.t()}
+
+  @type t :: %__MODULE__{
+          ready: boolean(),
+          format: String.t(),
+          linked_socket: pid(),
+          ready_fields: ReadyFields.t()
+        }
 
   @impl true
   def init(query_params) do
@@ -223,13 +229,19 @@ defmodule StoatGateway.Web.SocketHandler do
       {:ok, socket_pid} =
         DynamicSupervisor.start_child(
           Stoat.Sessions.Supervisor,
-          {StoatGateway.Session, %{data: data, socket: self(), type: type, ready_fields: ready_fields}}
+          {StoatGateway.Session,
+           %{data: data, socket: self(), type: type, ready_fields: ready_fields}}
         )
 
       Process.monitor(socket_pid)
 
       {:push, build_event(:Authenticated, format),
-       %__MODULE__{ready: true, format: format, linked_socket: socket_pid, ready_fields: ready_fields}}
+       %__MODULE__{
+         ready: true,
+         format: format,
+         linked_socket: socket_pid,
+         ready_fields: ready_fields
+       }}
     else
       _ ->
         {:push, build_error(:InvalidSession, "Invalid token provided", format),

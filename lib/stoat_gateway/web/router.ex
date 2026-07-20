@@ -13,9 +13,7 @@ defmodule StoatGateway.Web.Router do
         headers = StoatGateway.Web.HeaderMap.from_conn(conn)
 
         conn
-        |> WebSockAdapter.upgrade(StoatGateway.Web.SocketHandler, headers,
-          timeout: 35_000
-        )
+        |> WebSockAdapter.upgrade(StoatGateway.Web.SocketHandler, headers, timeout: 35_000)
         |> halt()
 
       _ ->
