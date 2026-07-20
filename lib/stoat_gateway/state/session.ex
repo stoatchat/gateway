@@ -277,25 +277,25 @@ defmodule StoatGateway.Session do
     {:noreply, %{state | linked_servers: [{id, pid, ref} | state.linked_servers]}}
   end
 
-  # Dead WS handling
-  def handle_info(
-        {:DOWN, _ref, :process, pid, _},
-        %__MODULE__{:linked_socket => socket_pid} = state
-      ) do
-    if pid == socket_pid do
-      # Websocket has disconnected- go into a no-forwarding mode until we timeout or have a new session
-      Logger.debug(
-        "session: #{inspect(self())} received :DOWN from linked socket- into nonforward mode"
-      )
+  def handle_info({:DOWN, _ref, :process, pid, _}, %__MODULE__{} = state)
+      when pid == state.linked_socket do
+    Logger.debug(
+      "session: #{inspect(self())} received :DOWN from linked socket- into nonforward mode"
+    )
 
-      Process.send_after(self(), :check_socket_timeout, @socket_disconnect_timeout)
-      {:noreply, %{state | forwarding: false}}
-    else
-      {:noreply, state}
-    end
+    Process.send_after(self(), :check_socket_timeout, @socket_disconnect_timeout)
+    {:noreply, %{state | forwarding: false}}
   end
 
-  def handle_info(:check_socket_timeout, state) do
+  def handle_info({:DOWN, _ref, :process, pid, _}, %__MODULE__{} = state)
+      when pid == state.linked_presence do
+    Process.send_after(self(), :presence_reconnect_attempt, 2_000)
+    {:noreply, state}
+  end
+
+  def handle_info({:DOWN, _ref, :process, _pid, _}, state), do: {:noreply, state}
+
+  def handle_info(:check_socket_timeout, %__MODULE__{} = state) do
     case Process.alive?(state.linked_socket) do
       true ->
         {:ok, state}
@@ -303,6 +303,24 @@ defmodule StoatGateway.Session do
       _ ->
         Logger.debug("session: terminating session #{inspect(self())} due to socket timeout")
         {:stop, :normal, state}
+    end
+  end
+
+  def handle_info(:presence_reconnect_attempt, %__MODULE__{} = state) do
+    case StoatGateway.Presence.lookup(state.user_id) do
+      {:ok, pid} ->
+        status = Map.get(state.data, "status", %{})
+
+        GenServer.cast(
+          pid,
+          {:session_link_async, state.session, state.type, self(), status}
+        )
+
+        {:noreply, %{state | linked_socket: pid}}
+
+      _ ->
+        Process.send_after(self(), :presence_reconnect_attempt, 2_000)
+        {:noreply, state}
     end
   end
 
