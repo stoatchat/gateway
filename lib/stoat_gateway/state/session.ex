@@ -219,7 +219,7 @@ defmodule StoatGateway.Session do
       "session=#{state.session} init presence link with channels #{inspect(dm_channels)}"
     )
 
-    relationships = Map.get(state.data, "relations")
+    relationships = Map.get(state.data, "relations", [])
 
     presence_pid =
       case StoatGateway.Presence.lookup(state.user_id) do
