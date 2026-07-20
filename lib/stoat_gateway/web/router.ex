@@ -10,10 +10,10 @@ defmodule StoatGateway.Web.Router do
 
     case upgrade_header do
       ["websocket"] ->
-        conn = fetch_query_params(conn)
+        headers = StoatGateway.Web.HeaderMap.from_conn(conn)
 
         conn
-        |> WebSockAdapter.upgrade(StoatGateway.Web.SocketHandler, conn.query_params,
+        |> WebSockAdapter.upgrade(StoatGateway.Web.SocketHandler, headers,
           timeout: 35_000
         )
         |> halt()
