@@ -19,11 +19,16 @@ defmodule StoatGateway.Web.Router do
         |> halt()
 
       _ ->
-        send_resp(conn, 400, "No upgrade headers")
+        conn
+        |> put_resp_header("content-type", "application/json")
+        |> send_resp(:ok, Jason.encode!(%{version: version()}))
     end
   end
 
   get _ do
     send_resp(conn, 404, "Not Found")
   end
+
+  @version Mix.Project.config()[:version]
+  def version(), do: @version
 end
