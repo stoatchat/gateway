@@ -67,12 +67,12 @@ defmodule StoatGateway.Web.SocketHandler do
         %{"channel" => channel_id} = _payload,
         %{ready: true} = state
       ) do
-        GenServer.cast(state.linked_socket, {:event_typing, :ChannelStopTyping, channel_id})
+    GenServer.cast(state.linked_socket, {:event_typing, :ChannelStopTyping, channel_id})
     {:ok, state}
   end
 
   def handle_payload(_, _, %{ready: false} = state) do
-    {:stop, :normal, 1007, build_error("InvalidSession", "Not Authenticated", state.format),
+    {:stop, :normal, 3000, build_error("InvalidSession", "Not Authenticated", state.format),
      state}
   end
 
@@ -113,6 +113,11 @@ defmodule StoatGateway.Web.SocketHandler do
   @impl true
   def terminate(:normal, state) do
     # Some sort of clean-up here
+    {:ok, state}
+  end
+
+  @impl true
+  def terminate(:shutdown, state) do
     {:ok, state}
   end
 
