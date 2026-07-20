@@ -47,8 +47,10 @@ defmodule Stoat.User do
     |> Enum.to_list()
   end
 
-  def fetch_user_settings(user_id) do
-    Mongo.find_one(:mongo_db, "user_settings", %{_id: user_id})
+  def fetch_user_settings(user_id, keys) do
+    Mongo.find_one(:mongo_db, "user_settings", %{_id: user_id},
+      projection: Map.put(Map.new(keys, fn key -> {key, 1} end), "_id", 0)
+    )
   end
 
   def fetch_unreads(user_id) do
