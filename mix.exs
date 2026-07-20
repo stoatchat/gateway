@@ -29,7 +29,10 @@ defmodule StoatGateway.MixProject do
       {:msgpack, "~> 0.8.1"},
       {:mongodb_driver, "~> 1.6"},
       {:redix, "~>1.5"},
-      {:toml, "~> 0.7"}
+      {:toml, "~> 0.7"},
+      {:telemetry, "~> 1.4"},
+      {:telemetry_metrics, "~> 1.1"},
+      {:peep, "~> 5.0"}
     ]
   end
 end
