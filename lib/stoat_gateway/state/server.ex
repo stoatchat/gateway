@@ -120,6 +120,21 @@ defmodule StoatGateway.Server do
   end
 
   def push_state_changes(
+        :ServerUpdate,
+        %{"data" => new_data, "clear" => clear},
+        %__MODULE__{} = state
+      ) do
+    data = Map.merge(state.data, new_data)
+
+    updated =
+      Enum.reduce(clear, data, fn key, server ->
+        Map.put(server, String.downcase(key), "")
+      end)
+
+    %{state | data: updated}
+  end
+
+  def push_state_changes(
         :ServerMemberUpdate,
         %{
           "id" => %{"user" => member_id},
