@@ -83,8 +83,7 @@ defmodule StoatGateway.Server do
   def handle_cast({:dispatch_typing, event, channel_id, user_id}, state) do
     GenServer.cast(
       self(),
-      {:dispatch, event,
-       %{type: Atom.to_string(event), id: channel_id, user: user_id}}
+      {:dispatch, event, %{type: Atom.to_string(event), id: channel_id, user: user_id}}
     )
 
     Logger.debug("server:#{inspect(self())} dispatching typing by #{user_id} to #{channel_id}")
@@ -152,7 +151,7 @@ defmodule StoatGateway.Server do
     affected_sessions = filter_sessions_by_role(state.linked_sessions, role_id)
 
     new_data =
-      Map.update!(state.data, "roles", fn roles ->
+      Map.update(state.data, "roles", %{}, fn roles ->
         Map.update(roles, role_id, %{"a" => 0, "d" => 0}, fn old ->
           %{old | "permissions" => permissions}
         end)
@@ -167,7 +166,7 @@ defmodule StoatGateway.Server do
     affected_sessions = filter_sessions_by_role(state.linked_sessions, role_id)
 
     data =
-      Map.update!(state.data, "roles", fn roles ->
+      Map.update(state.data, "roles", %{}, fn roles ->
         Enum.filter(roles, fn {id, _} -> id != role_id end)
       end)
 
@@ -199,7 +198,7 @@ defmodule StoatGateway.Server do
       Map.keys(role_permissions)
       |> Enum.flat_map(fn role -> filter_sessions_by_role(state.linked_sessions, role) end)
       |> Enum.dedup_by(fn session -> session.session_id end)
-    
+
     updated_state = %{state | channels: new_channels}
     update_visibility_for_sessions(affected_sessions, state, updated_state)
     updated_state
