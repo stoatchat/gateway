@@ -182,6 +182,12 @@ defmodule StoatGateway.Server do
     updated_state
   end
 
+  def push_state_changes(:ChannelCreate, %{"_id" => channel_id} = data, %__MODULE__{} = state) do
+    :ets.insert(:channel_server_refs, {channel_id, state.id})
+    final_channel = Map.take(data, ["_id", "channel_type", "name"])
+    %{state | channels: Map.put(state.channels, channel_id, final_channel)}
+  end
+
   def push_state_changes(
         :ChannelUpdate,
         %{"id" => channel_id, "data" => %{"role_permissions" => role_permissions}},
