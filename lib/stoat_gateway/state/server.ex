@@ -74,9 +74,9 @@ defmodule StoatGateway.Server do
   end
 
   def handle_cast({:dispatch, event, payload}, state) do
-    sessions = filtered_sessions_for_event(event, payload, state)
-    fanout({event, payload}, sessions)
     new_state = push_state_changes(event, payload, state)
+    sessions = filtered_sessions_for_event(event, payload, new_state)
+    fanout({event, payload}, sessions)
     {:noreply, new_state}
   end
 
@@ -192,14 +192,14 @@ defmodule StoatGateway.Server do
 
     new_channels =
       Map.update!(state.channels, channel_id, fn channel ->
-        %{channel | "role_permissions" => role_permissions}
+        Map.put(channel, "role_permissions", role_permissions)
       end)
 
     affected_sessions =
       Map.keys(role_permissions)
-      |> Enum.map(fn role -> filter_sessions_by_role(state.linked_sessions, role) end)
-      |> Enum.dedup()
-
+      |> Enum.flat_map(fn role -> filter_sessions_by_role(state.linked_sessions, role) end)
+      |> Enum.dedup_by(fn session -> session.session_id end)
+    
     updated_state = %{state | channels: new_channels}
     update_visibility_for_sessions(affected_sessions, state, updated_state)
     updated_state
@@ -214,7 +214,7 @@ defmodule StoatGateway.Server do
 
     new_channels =
       Map.update!(state.channels, channel_id, fn channel ->
-        %{channel | "default_permissions" => default_permissions}
+        Map.put(channel, "default_permissions", default_permissions)
       end)
 
     updated_state = %{state | channels: new_channels}
@@ -310,7 +310,7 @@ defmodule StoatGateway.Server do
     Enum.filter(sessions, fn session -> session.user_id == user_id end)
   end
 
-  def filtered_sessions_for_event(event, data, state = %__MODULE__{}) do
+  def filtered_sessions_for_event(event, data, %__MODULE__{} = state) do
     case StoatGateway.Events.Consumer.is_channel_event?(event) do
       true ->
         channel_id = StoatGateway.Events.Consumer.parse_channel_id(data)
