@@ -164,7 +164,7 @@ defmodule StoatGateway.Events.Consumer do
   def parse_channel_id(%{"_id" => channel_id}), do: channel_id
   def parse_channel_id(%{id: channel_id}), do: channel_id
 
-  def is_channel_event?(:MessageCreate), do: true
+  def is_channel_event?(:Message), do: true
   def is_channel_event?(:MessageAppend), do: true
   def is_channel_event?(:MessageUpdate), do: true
   def is_channel_event?(:MessageDelete), do: true
