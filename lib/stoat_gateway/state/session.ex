@@ -70,6 +70,26 @@ defmodule StoatGateway.Session do
     )
   end
 
+  def start_link(%{
+    socket: socket,
+    data: %{
+      "_id" => id
+    },
+    type: type,
+    ready_fields: ready_fields
+  }) do
+    GenServer.start_link(
+      __MODULE__,
+      %__MODULE__{
+        user_id: id,
+        linked_socket: socket,
+        session: id,
+        type: type,
+        ready_fields: ready_fields
+      }
+    )
+  end
+
   def init(state) do
     Logger.debug("session: init self: #{inspect(self())} with state: #{inspect(state)}")
     Process.monitor(state.linked_socket)
