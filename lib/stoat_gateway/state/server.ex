@@ -4,7 +4,7 @@ defmodule StoatGateway.Server do
 
   defstruct id: nil,
             data: %{},
-            channels: [],
+            channels: %{},
             linked_sessions: []
 
   def start_link(%{id: id}) do
@@ -33,7 +33,7 @@ defmodule StoatGateway.Server do
   def init(state) do
     channels =
       Stoat.Server.fetch_channels(state.id)
-      |> Enum.into(%{}, fn %{"_id" => id} = channel -> {id, channel} end)
+      |> Map.new(fn %{"_id" => id} = channel -> {id, channel} end)
 
     server = Stoat.Server.fetch_by_id(state.id)
     {:ok, %{state | data: server, channels: channels}, {:continue, :ensure_init_state}}
@@ -131,7 +131,13 @@ defmodule StoatGateway.Server do
         Map.put(server, String.downcase(key), "")
       end)
 
-    %{state | data: updated}
+    updated_state = %{state | data: updated}
+
+    if Map.has_key?(new_data, "default_permissions") do
+      update_visibility_for_sessions(state.linked_sessions, state, updated_state)
+    end
+
+    updated_state
   end
 
   def push_state_changes(
@@ -166,8 +172,8 @@ defmodule StoatGateway.Server do
     affected_sessions = filter_sessions_by_role(state.linked_sessions, role_id)
 
     new_data =
-      Map.update(state.data, "roles", %{}, fn roles ->
-        Map.update(roles, role_id, %{"a" => 0, "d" => 0}, fn old ->
+      Map.update(state.data, "roles", %{role_id => %{"permissions" => permissions}}, fn roles ->
+        Map.update(roles, role_id, %{"permissions" => permissions}, fn old ->
           %{old | "permissions" => permissions}
         end)
       end)
@@ -205,41 +211,54 @@ defmodule StoatGateway.Server do
 
   def push_state_changes(
         :ChannelUpdate,
-        %{"id" => channel_id, "data" => %{"role_permissions" => role_permissions}},
+        %{"id" => channel_id, "clear" => clear, "data" => data},
         state
       ) do
-    Logger.debug("server: push_state_changes: :ChannelUpdate match RolePermissions ")
+    Logger.debug("server: push_state_changes: :ChannelUpdate")
 
     new_channels =
       Map.update!(state.channels, channel_id, fn channel ->
-        Map.put(channel, "role_permissions", role_permissions)
+        Enum.reduce(clear, channel, fn key, channel ->
+          Map.delete(
+            channel,
+            case key do
+              "Description" -> "description"
+              "Icon" -> "icon"
+              "DefaultPermissions" -> "default_permissions"
+              "Voice" -> "voice"
+            end
+          )
+        end)
+        |> Map.merge(data)
       end)
 
+    default_permissions =
+      Map.has_key?(data, "default_permissions") || Enum.member?(clear, "DefaultPermissions")
+
+    role_permissions = Map.get(data, "role_permissions")
+
     affected_sessions =
-      Map.keys(role_permissions)
-      |> Enum.flat_map(fn role -> filter_sessions_by_role(state.linked_sessions, role) end)
-      |> Enum.dedup_by(fn session -> session.session_id end)
+      if default_permissions do
+        state.linked_sessions
+      else
+        if role_permissions != nil do
+          Map.keys(role_permissions)
+          |> Enum.flat_map(fn role -> filter_sessions_by_role(state.linked_sessions, role) end)
+          |> Enum.dedup_by(fn session -> session.session_id end)
+        else
+          []
+        end
+      end
 
     updated_state = %{state | channels: new_channels}
     update_visibility_for_sessions(affected_sessions, state, updated_state)
     updated_state
   end
 
-  def push_state_changes(
-        :ChannelUpdate,
-        %{"id" => channel_id, "data" => %{"default_permissions" => default_permissions}},
-        state
-      ) do
-    Logger.debug("server: push_state_changes: :ChannelUpdate match DefaultPermissions ")
+  def push_state_changes(:ChannelDelete, %{"id" => channel_id}, state) do
+    :ets.delete(:channel_server_refs, channel_id)
 
-    new_channels =
-      Map.update!(state.channels, channel_id, fn channel ->
-        Map.put(channel, "default_permissions", default_permissions)
-      end)
-
-    updated_state = %{state | channels: new_channels}
-    update_visibility_for_sessions(state.linked_sessions, state, updated_state)
-    updated_state
+    %{state | channels: Map.delete(state.channels, channel_id)}
   end
 
   def push_state_changes(_, _, state), do: state
@@ -284,6 +303,9 @@ defmodule StoatGateway.Server do
 
     build_channel_deletes(removed_channel_ids) |> dispatch_maybe_bulk(new_session)
     build_channel_creates(added_channels) |> dispatch_maybe_bulk(new_session)
+
+    build_server_channel_updates(updated_viewable_channels, new_state)
+    |> dispach_session(new_session)
   end
 
   def build_channel_creates(channels) do
@@ -298,16 +320,24 @@ defmodule StoatGateway.Server do
     end)
   end
 
+  def build_server_channel_updates(channels, state) do
+    %{type: :ServerUpdate, id: state.id, data: %{channels: channels}}
+  end
+
+  def dispatch_maybe_bulk([], _), do: nil
+
   def dispatch_maybe_bulk([payload] = _events, session) do
     Logger.debug("server: dispatch_maybe_bulk single event #{session.user_id}")
     send(session.pid, {:socket_dispatch, {payload.type, payload}})
   end
 
-  def dispatch_maybe_bulk([_, _] = events, session) do
+  def dispatch_maybe_bulk(events, session) do
     send(session.pid, {:socket_dispatch, {:Bulk, %{type: :Bulk, v: events}}})
   end
 
-  def dispatch_maybe_bulk([], _), do: nil
+  def dispach_session(payload, session) do
+    send(session.pid, {:socket_dispatch, {payload.type, payload}})
+  end
 
   def filter_sessions_by_role(sessions, role_id) do
     Enum.filter(sessions, fn session ->

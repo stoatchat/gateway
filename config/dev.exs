@@ -1,7 +1,7 @@
 import Config
 
 config :stoat_gateway,
-  ws_port: System.get_env("WS_PORT", "4000"),
+  ws_port: System.get_env("WS_PORT", "14703"),
   mongodb: "mongodb://localhost:27017/",
   rabbit: [
     host: "localhost",
