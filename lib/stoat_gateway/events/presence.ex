@@ -51,6 +51,7 @@ defmodule StoatGateway.Presence do
     ensure_gdm_subscriptions(state.dm_channels)
     ensure_friend_subscriptions(state.relationships)
     ensure_online_set_subscription(state)
+    subscribers_dispatch(build_user_update(true, state), state)
     {:noreply, state}
   end
 
@@ -110,8 +111,7 @@ defmodule StoatGateway.Presence do
     if event_id == state.last_event_id do
       {:noreply, state}
     else
-      subscribers = :pg.get_members(:presence, state.user_id)
-      Enum.each(subscribers, &send(&1, {:presence_update, payload}))
+      subscribers_dispatch(payload, state)
       state = maybe_update_state(:UserUpdate, data, state)
       {:noreply, %{state | last_event_id: event_id}}
     end
@@ -215,8 +215,14 @@ defmodule StoatGateway.Presence do
     Enum.each(state.sessions, &send(&1.pid, {:socket_dispatch, payload}))
   end
 
+  defp subscribers_dispatch(payload, state) do
+    subscribers = :pg.get_members(:presence, state.user_id)
+    Enum.each(subscribers, &send(&1, {:presence_update, payload}))
+  end
+
   def terminate(_, state) do
     Redix.command(:redix, ["SREM", "online", state.user_id])
+    subscribers_dispatch(build_user_update(false, state), state)
   end
 
   defp ensure_presences_size(presences) when length(presences) > @maximum_previous_presences do
@@ -224,6 +230,19 @@ defmodule StoatGateway.Presence do
   end
 
   defp ensure_presences_size(presences), do: presences
+
+  defp build_user_update(presence, state) do
+    {:UserUpdate,
+     %{
+       type: :UserUpdate,
+       id: state.user_id,
+       event_id: Ecto.ULID.generate(),
+       data: %{
+         online: presence
+       },
+       clear: []
+     }}
+  end
 
   def code_change(_old_vsn, state, _extra), do: {:ok, state}
 end
