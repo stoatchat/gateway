@@ -61,4 +61,15 @@ defmodule Stoat.User do
     Mongo.find(:mongo_db, "policy_changes", %{"policy.created_time": %{gt: last_acknowledged}})
     |> Enum.to_list()
   end
+
+  def transform_badges(user_id, badges) do
+    cutoff = get_in(Application.get_env(:stoat_gateway, :revolt), ["api", "users", "early_adopter_cutoff"])
+    case Needle.ULID.timestamp(user_id) do
+      {:ok, timestamp} -> 
+      if timestamp < cutoff do
+        badges + 256
+      end
+      _ -> badges
+    end
+  end
 end

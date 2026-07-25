@@ -236,7 +236,7 @@ defmodule StoatGateway.Presence do
      %{
        type: :UserUpdate,
        id: state.user_id,
-       event_id: Ecto.ULID.generate(),
+       event_id: Needle.ULID.generate(),
        data: %{
          online: presence
        },

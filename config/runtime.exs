@@ -24,5 +24,6 @@ if config_env() == :prod do
     ],
     redis:
       get_in(revolt, ["database", "redis"]) ||
-        System.get_env("REDIS_URI", "redis://localhost:6379")
+        System.get_env("REDIS_URI", "redis://localhost:6379"),
+    revolt: revolt
 end

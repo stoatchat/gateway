@@ -376,15 +376,16 @@ defmodule StoatGateway.Session do
   end
 
   defp build_ready_user(user, relationship_status, {online, status}) do
+    id = Map.get(user, "_id")
     %Stoat.PublicUser{
       relationship: relationship_status,
       username: Map.get(user, "username"),
       discriminator: Map.get(user, "discriminator"),
       display_name: Map.get(user, "display_name"),
       avatar: Map.get(user, "avatar", %{}),
-      badges: Map.get(user, "badges"),
+      badges: Stoat.User.transform_badges(id, Map.get(user, "badges", 0)),
       online: online,
-      _id: Map.get(user, "_id"),
+      _id: id,
       status: status
     }
   end
