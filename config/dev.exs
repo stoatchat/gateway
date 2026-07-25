@@ -9,4 +9,11 @@ config :stoat_gateway,
     username: "rabbituser",
     password: "rabbitpass"
   ],
-  redis: "redis://localhost:6379"
+  redis: "redis://localhost:6379",
+  revolt: %{
+    "api" => %{
+      "users" => %{
+        "early_adopter_cutoff" => 1784761200
+      }  
+    }
+  }

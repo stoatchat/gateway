@@ -30,7 +30,7 @@ defmodule StoatGateway.MixProject do
       {:mongodb_driver, "~> 1.6"},
       {:redix, "~>1.5"},
       {:toml, "~> 0.7"},
-      {:ecto_ulid_next, "~> 1.0"}
+      {:needle_ulid, git: "https://github.com/bonfire-networks/needle_ulid", ref: "c48e90b"}
     ]
   end
 end
