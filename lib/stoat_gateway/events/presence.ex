@@ -234,13 +234,13 @@ defmodule StoatGateway.Presence do
   defp build_user_update(presence, state) do
     {:UserUpdate,
      %{
-       type: :UserUpdate,
-       id: state.user_id,
-       event_id: Needle.ULID.generate(),
-       data: %{
-         online: presence
+       "type" => :UserUpdate,
+       "id" => state.user_id,
+       "event_id" => Needle.ULID.generate(),
+       "data" => %{
+         "online" => presence
        },
-       clear: []
+       "clear" => []
      }}
   end
 
