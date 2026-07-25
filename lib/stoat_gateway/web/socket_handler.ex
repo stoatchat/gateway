@@ -92,12 +92,12 @@ defmodule StoatGateway.Web.SocketHandler do
 
   @behaviour WebSock
 
-  defstruct ready: false, format: :json, linked_socket: nil, ready_fields: %ReadyFields{}
+  defstruct ready: false, format: :json, linked_session: nil, ready_fields: %ReadyFields{}
 
   @type t :: %__MODULE__{
           ready: boolean(),
           format: String.t(),
-          linked_socket: pid(),
+          linked_session: pid(),
           ready_fields: ReadyFields.t()
         }
 
@@ -159,7 +159,7 @@ defmodule StoatGateway.Web.SocketHandler do
         %{"channel" => channel_id} = _payload,
         %{ready: true} = state
       ) do
-    GenServer.cast(state.linked_socket, {:event_typing, :ChannelStartTyping, channel_id})
+    GenServer.cast(state.linked_session, {:event_typing, :ChannelStartTyping, channel_id})
     {:ok, state}
   end
 
@@ -168,7 +168,7 @@ defmodule StoatGateway.Web.SocketHandler do
         %{"channel" => channel_id} = _payload,
         %{ready: true} = state
       ) do
-    GenServer.cast(state.linked_socket, {:event_typing, :ChannelStopTyping, channel_id})
+    GenServer.cast(state.linked_session, {:event_typing, :ChannelStopTyping, channel_id})
     {:ok, state}
   end
 
@@ -192,8 +192,15 @@ defmodule StoatGateway.Web.SocketHandler do
   end
 
   @impl true
+  def handle_info({:session_ack, pid}, state) do
+    Process.monitor(pid)
+    {:ok, %{state | linked_session: pid}}
+  end
+
+  @impl true
   def handle_info({:DOWN, _ref, :process, _pid, _}, state) do
-    {:stop, :shutdown, 1011, build_error("ServerError", state.format), state}
+    {:ok, state}
+    #{:stop, :shutdown, 1011, build_error("ServerError", state.format), state}
   end
 
   @impl true
@@ -231,20 +238,20 @@ defmodule StoatGateway.Web.SocketHandler do
   defp handle_auth(token, format, ready_fields) do
     with {type, data} <- StoatGateway.Auth.find_by_token(token) do
       # NOTE: replace this with lookup for SessionResume in the future
-      {:ok, socket_pid} =
+      {:ok, session_pid} =
         DynamicSupervisor.start_child(
           Stoat.Sessions.Supervisor,
           {StoatGateway.Session,
            %{data: data, socket: self(), type: type, ready_fields: ready_fields}}
         )
 
-      Process.monitor(socket_pid)
+      Process.monitor(session_pid)
 
       {:push, build_event(:Authenticated, format),
        %__MODULE__{
          ready: true,
          format: format,
-         linked_socket: socket_pid,
+         linked_session: session_pid,
          ready_fields: ready_fields
        }}
     else

@@ -15,7 +15,7 @@ end
 
 defmodule StoatGateway.Session do
   alias StoatGateway.Web.ReadyFields
-  use GenServer, restart: :temporary
+  use GenServer, restart: :transient
   require Logger
   # Arbitrary 20s timeout to resume
   @socket_disconnect_timeout 20_000
@@ -90,10 +90,23 @@ defmodule StoatGateway.Session do
     )
   end
 
+  @spec lookup(binary(), binary()) :: {:ok, pid()} | {:error, atom()}
+  def lookup(id, session_id) do
+    case Registry.match(Stoat.Sessions, id, session_id) do
+      [{presence_pid, nil}] ->
+        {:ok, presence_pid}
+
+      _ ->
+        {:error, :not_found}
+    end
+  end
+
   def init(state) do
     Logger.debug("session: init self: #{inspect(self())} with state: #{inspect(state)}")
     Process.monitor(state.linked_socket)
     Registry.register(Stoat.Sessions, state.user_id, state.session)
+    # let the socket know of the PID in case we have error'd and are a new Process
+    send(state.linked_socket, {:session_ack, self()})
     {:ok, state, {:continue, :ready}}
   end
 
