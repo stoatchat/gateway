@@ -29,7 +29,8 @@ defmodule StoatGateway.MixProject do
       {:msgpack, "~> 0.8.1"},
       {:mongodb_driver, "~> 1.6"},
       {:redix, "~>1.5"},
-      {:toml, "~> 0.7"}
+      {:toml, "~> 0.7"},
+      {:ecto_ulid_next, "~> 1.0"}
     ]
   end
 end
