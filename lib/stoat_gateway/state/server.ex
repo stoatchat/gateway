@@ -73,6 +73,13 @@ defmodule StoatGateway.Server do
     {:noreply, %{state | linked_sessions: [session | state.linked_sessions]}}
   end
 
+  def handle_cast({:dispatch, :ChannelDelete = event, payload}, state) do
+    sessions = filtered_sessions_for_event(event, payload, state)
+    new_state = push_state_changes(event, payload, state)
+    fanout({event, payload}, sessions)
+    {:noreply, new_state}
+  end
+
   def handle_cast({:dispatch, event, payload}, state) do
     new_state = push_state_changes(event, payload, state)
     sessions = filtered_sessions_for_event(event, payload, new_state)
