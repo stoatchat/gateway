@@ -30,6 +30,10 @@ defmodule StoatGateway.MixProject do
       {:mongodb_driver, "~> 1.6"},
       {:redix, "~>1.5"},
       {:toml, "~> 0.7"},
+      {:telemetry, "~> 1.4"},
+      {:telemetry_metrics, "~> 1.1"},
+      {:telemetry_poller, "~> 0.4"},
+      {:peep, "~> 5.0"},
       {:needle_ulid, git: "https://github.com/bonfire-networks/needle_ulid", ref: "c48e90b"}
     ]
   end
