@@ -34,7 +34,6 @@ defmodule StoatGateway.MixProject do
       {:telemetry_metrics, "~> 1.1"},
       {:telemetry_poller, "~> 0.4"},
       {:peep, "~> 5.0"},
-      {:ecto_ulid_next, "~> 1.0"},
       {:needle_ulid, git: "https://github.com/bonfire-networks/needle_ulid", ref: "c48e90b"}
     ]
   end
