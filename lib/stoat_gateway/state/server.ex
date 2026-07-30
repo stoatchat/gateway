@@ -113,7 +113,7 @@ defmodule StoatGateway.Server do
         session.pid == pid
       end)
 
-    user_id = Map.get(session, "user_id")
+    user_id = Map.get(session, :user_id)
 
     if not user_session_exists?(user_id, new_sessions) do
       :pg.leave(:presence, user_id, self())
