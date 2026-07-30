@@ -195,7 +195,7 @@ defmodule StoatGateway.Server do
 
     data =
       Map.update(state.data, "roles", %{}, fn roles ->
-        Enum.filter(roles, fn {id, _} -> id != role_id end)
+        Map.delete(roles, role_id)
       end)
 
     new_sessions =
