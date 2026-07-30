@@ -20,7 +20,7 @@ defmodule Stoat.User do
   def fetch_server_memberships(user_id) do
     Mongo.find(:mongo_db, "server_members", %{
       "_id.user": user_id,
-      pending_deleation_at: %{"$exists": false}
+      pending_deletion_at: %{"$exists": false}
     })
     |> Enum.to_list()
   end
@@ -63,13 +63,19 @@ defmodule Stoat.User do
   end
 
   def transform_badges(user_id, badges) do
-    cutoff = get_in(Application.get_env(:stoat_gateway, :revolt), ["api", "users", "early_adopter_cutoff"])
+    cutoff =
+      get_in(Application.get_env(:stoat_gateway, :revolt), [
+        "api",
+        "users",
+        "early_adopter_cutoff"
+      ])
+
     case Needle.ULID.timestamp(user_id) do
-      {:ok, timestamp} -> 
-      if timestamp < cutoff do
+      {:ok, timestamp} when timestamp < cutoff ->
         badges + 256
-      end
-      _ -> badges
+
+      _ ->
+        badges
     end
   end
 end
