@@ -349,7 +349,7 @@ defmodule StoatGateway.Session do
           {:session_link_async, state.session, state.type, self(), status}
         )
 
-        {:noreply, %{state | linked_socket: pid}}
+        {:noreply, %{state | linked_presence: pid}}
 
       _ ->
         Process.send_after(self(), :presence_reconnect_attempt, 2_000)
