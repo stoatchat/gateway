@@ -1,5 +1,5 @@
 defmodule Stoat.PublicUser do
-  @derive Jason.Encoder
+  use Stoat.Model
 
   defstruct _id: nil,
             username: nil,
