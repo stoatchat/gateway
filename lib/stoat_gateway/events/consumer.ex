@@ -102,6 +102,7 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("VoiceChannelJoin", data), do: handle_channel_event(:VoiceChannelJoin, data)
   def handle_event("VoiceChannelLeave", data), do: handle_channel_event(:VoiceChannelLeave, data)
   def handle_event("VoiceChannelMove", data), do: handle_channel_event(:VoiceChannelMove, data)
+  def handle_event("VoiceCallUpdate", data), do: handle_channel_event(:VoiceCallUpdate, data)
 
   def handle_event("WebhookCreate", data), do: handle_channel_event(:WebhookCreate, data)
   def handle_event("WebhookUpdate", data), do: handle_channel_event(:WebhookUpdate, data)
@@ -179,6 +180,7 @@ defmodule StoatGateway.Events.Consumer do
   def is_channel_event?(:VoiceChannelJoin), do: true
   def is_channel_event?(:VoiceChannelLeave), do: true
   def is_channel_event?(:VoiceChannelMove), do: true
+  def is_channel_event?(:VoiceCallUpdate), do: true
   def is_channel_event?(:UserVoiceStateUpdate), do: true
   def is_channel_event?(:WebhookCreate), do: true
   def is_channel_event?(:WebhookUpdate), do: true
