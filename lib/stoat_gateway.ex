@@ -11,8 +11,9 @@ defmodule StoatGateway do
        name: Stoat.Metrics.Peep,
        metrics: [
          last_value("vm.memory.total", unit: :byte),
-         counter("bandit.websocket.start.count",
-           event_name: [:bandit, :websocket, :start]
+         counter("gateway.consumer.process.count",
+           event_name: [:gateway, :consumer, :process],
+           tags: [:event, :type]
          ),
          counter("bandit.websocket.start.count",
            event_name: [:bandit, :websocket, :start]
@@ -58,7 +59,8 @@ defmodule StoatGateway do
            measurement: :send_binary_frame_bytes,
            unit: :byte
          )
-       ]},
+       ],
+       global_tags: %{node: node()}},
       %{id: :presence_group, start: {:pg, :start_link, [:presence]}},
       %{id: :gdm_group, start: {:pg, :start_link, [:gdm_channels]}},
       {Registry, keys: :unique, name: Stoat.Servers},

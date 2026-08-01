@@ -35,9 +35,12 @@ defmodule StoatGateway.Events.Consumer do
   end
 
   defp process_message(
-         %Broadway.Message{data: {:ok, data}, metadata: %{headers: [{"c", _, route_key}]}} =
+         %Broadway.Message{data: {:ok, data}, metadata: %{headers: headers}} =
            message
        ) do
+    route_key =
+      Enum.find_value(headers, fn {"c", _, route_key} -> route_key end)
+
     process_event(data, route_key)
     message
   end
@@ -49,11 +52,14 @@ defmodule StoatGateway.Events.Consumer do
   end
 
   # NOTE: We use the `c` header in RMQ to match the intended channel from Delta
+  def process_event(%{"type" => event_type} = data, route_keys) when is_list(route_keys) do
+    :telemetry.execute([:gateway, :consumer, :process], %{}, %{event: event_type, type: :bulk})
+    Keyword.values(route_keys)
+    |> Enum.each(&handle_event(event_type, {&1, data}))
+  end
+
   def process_event(%{"type" => event_type} = data, route_key) do
-    # TODO: wrap telemetry and otel context around this
-    Logger.debug("consumer: channel header: #{inspect(route_key)} for event #{event_type}")
-    # TODO: Hack-fix, i hate this whole handling
-    # perhaps we can get a type header and just route events based on that
+    :telemetry.execute([:gateway, :consumer, :process], %{}, %{event: event_type, type: :single})
     handle_event(event_type, {route_key, data})
   end
 
@@ -102,7 +108,9 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("VoiceChannelJoin", data), do: handle_channel_event(:VoiceChannelJoin, data)
   def handle_event("VoiceChannelLeave", data), do: handle_channel_event(:VoiceChannelLeave, data)
   def handle_event("VoiceChannelMove", data), do: handle_channel_event(:VoiceChannelMove, data)
-  def handle_event("VoiceCallUpdate", {route, %{"channel_id" => channel_id}}=data) when route == channel_id do
+
+  def handle_event("VoiceCallUpdate", {route, %{"channel_id" => channel_id}} = data)
+      when route == channel_id do
     handle_channel_event(:VoiceCallUpdate, data)
   end
 
@@ -132,7 +140,7 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("ServerMemberUpdate", data), do: handle_server_event(:ServerMemberUpdate, data)
   def handle_event("ServerMemberJoin", data), do: handle_server_event(:ServerMemberJoin, data)
 
-  def handle_event("ServerMemberLeave", {_, %{"user" => user_id}=payload}=data) do
+  def handle_event("ServerMemberLeave", {_, %{"user" => user_id} = payload} = data) do
     handle_server_event(:ServerMemberLeave, data)
     handle_presence_event(:ServerMemberLeave, {user_id, payload})
   end
