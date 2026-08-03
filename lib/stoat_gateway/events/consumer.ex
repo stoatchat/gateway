@@ -41,6 +41,10 @@ defmodule StoatGateway.Events.Consumer do
     route_key =
       Enum.find_value(headers, fn {"c", _, route_key} -> route_key end)
 
+    Logger.debug(
+      "consumer: process_event: route_key=#{inspect(route_key)} event=#{inspect(data)}"
+    )
+
     process_event(data, route_key)
     message
   end
@@ -51,13 +55,15 @@ defmodule StoatGateway.Events.Consumer do
     message
   end
 
-  # NOTE: We use the `c` header in RMQ to match the intended channel from Delta
+  # p_broadcast: events with an array of channels
   def process_event(%{"type" => event_type} = data, route_keys) when is_list(route_keys) do
     :telemetry.execute([:gateway, :consumer, :process], %{}, %{event: event_type, type: :bulk})
+
     Keyword.values(route_keys)
     |> Enum.each(&handle_event(event_type, {&1, data}))
   end
-
+  
+  # p: single channel events
   def process_event(%{"type" => event_type} = data, route_key) do
     :telemetry.execute([:gateway, :consumer, :process], %{}, %{event: event_type, type: :single})
     handle_event(event_type, {route_key, data})
@@ -66,6 +72,10 @@ defmodule StoatGateway.Events.Consumer do
   # Custom logic to pattern handle messages in servers & dm channels
   def handle_event("Message", {_, %{"member" => %{"_id" => %{"server" => server_id}}} = data}) do
     server_fanout(server_id, {:Message, data})
+  end
+
+  def handle_event("Message", {_, %{"system" => _system}}=data) do
+    handle_channel_event(:Message, data)
   end
 
   def handle_event("Message", {_, %{"channel" => channel_id} = data}) do
@@ -95,15 +105,7 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("ChannelUpdate", data), do: handle_channel_event(:ChannelUpdate, data)
   def handle_event("ChannelDelete", data), do: handle_channel_event(:ChannelDelete, data)
   def handle_event("ChannelGroupLeave", data), do: handle_channel_event(:ChannelGroupleave, data)
-
-  def handle_event("ChannelGroupJoin", {_, %{"recipients" => recipients} = data}) do
-    Enum.each(recipients, fn user_id ->
-      case StoatGateway.Presence.lookup(user_id) do
-        {:ok, pid} -> send(pid, {:presence_event_dispatch, {:ChannelGroupJoin, data}})
-        _ -> nil
-      end
-    end)
-  end
+  def handle_event("ChannelGroupJoin", data), do: handle_channel_event(:ChannelGroupJoin, data)
 
   def handle_event("VoiceChannelJoin", data), do: handle_channel_event(:VoiceChannelJoin, data)
   def handle_event("VoiceChannelLeave", data), do: handle_channel_event(:VoiceChannelLeave, data)
