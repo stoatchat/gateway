@@ -76,7 +76,7 @@ defmodule Stoat.User do
       ])
 
     case Needle.ULID.timestamp(user_id) do
-      {:ok, timestamp} when timestamp < cutoff ->
+      {:ok, timestamp} when timestamp > cutoff ->
         badges + 256
 
       _ ->
