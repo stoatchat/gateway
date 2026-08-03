@@ -7,6 +7,7 @@ defmodule Stoat.PublicUser do
             display_name: nil,
             avatar: %{},
             badges: nil,
+            pronouns: nil,
             relationship: nil,
             online: nil,
             status: %{}

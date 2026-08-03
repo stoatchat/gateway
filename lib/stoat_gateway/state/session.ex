@@ -163,8 +163,8 @@ defmodule StoatGateway.Session do
         %{
           ready_payload
           | users: [
-              build_ready_user(state.data, "User", {true, self_status})
-              | build_ready_relations_from_state(user_ids)
+              build_ready_user(state.data, "User", true, self_status)
+              | build_ready_relations_from_state(user_ids, state)
             ]
         }
       else
@@ -361,27 +361,20 @@ defmodule StoatGateway.Session do
     end
   end
 
-  @spec build_ready_relations_from_state(map()) :: list(map())
-  defp build_ready_relations_from_state(relations) do
+  @spec build_ready_relations_from_state(map(), __MODULE__) :: list(map())
+  defp build_ready_relations_from_state(relations, state) do
     users = Stoat.User.fetch_by_ids(Map.keys(relations))
 
     Enum.map(relations, fn {id, %{"status" => relation_status}} ->
       user = Map.get(users, id)
 
-      presence =
-        case StoatGateway.Presence.lookup(id) do
-          {:ok, pid} ->
-            GenServer.call(pid, :fetch_presence_status)
+      {online, status} = maybe_get_presence(id, relation_status, state)
 
-          {:error, _} ->
-            {false, %{}}
-        end
-
-      build_ready_user(user, relation_status, presence)
+      build_ready_user(user, relation_status, online, status)
     end)
   end
 
-  defp build_ready_user(user, relationship_status, {online, status}) do
+  defp build_ready_user(user, relationship_status, online, status) do
     id = Map.get(user, "_id")
 
     %Stoat.PublicUser{
@@ -391,10 +384,32 @@ defmodule StoatGateway.Session do
       display_name: Map.get(user, "display_name"),
       avatar: Map.get(user, "avatar", %{}),
       badges: Stoat.User.transform_badges(id, Map.get(user, "badges", 0)),
+      pronouns: Map.get(user, "pronouns"),
       online: online,
       _id: id,
       status: status
     }
+  end
+
+  # Presence fetch transform based on relation: 
+  # https://github.com/stoatchat/stoatchat/blob/main/crates/core/database/src/util/bridge/v0.rs#L1084
+  defp maybe_get_presence(_user_id, _relation, %__MODULE__{type: :bot} = _state) do
+    {false, %{}}
+  end
+
+  defp maybe_get_presence(_user_id, "BlockedOther", %__MODULE__{} = _state) do
+    {false, %{}}
+  end
+
+  defp maybe_get_presence(user_id, _relation, %__MODULE__{} = _state) do
+    Logger.debug("session: build_ready_users -> maybe_get_presence: fetching presence for #{user_id}")
+    case StoatGateway.Presence.lookup(user_id) do
+      {:ok, pid} ->
+        GenServer.call(pid, :fetch_presence_status)
+
+      {:error, _} ->
+        {false, %{}}
+    end
   end
 
   defp fetch_voice_states(voice_channels) do
