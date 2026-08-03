@@ -71,13 +71,13 @@ defmodule StoatGateway.Session do
   end
 
   def start_link(%{
-    socket: socket,
-    data: %{
-      "_id" => id
-    },
-    type: type,
-    ready_fields: ready_fields
-  }) do
+        socket: socket,
+        data: %{
+          "_id" => id
+        },
+        type: type,
+        ready_fields: ready_fields
+      }) do
     GenServer.start_link(
       __MODULE__,
       %__MODULE__{
@@ -102,6 +102,7 @@ defmodule StoatGateway.Session do
   end
 
   def init(state) do
+    :telemetry.execute([:gateway, :session, :init], %{}, %{type: state.type})
     Logger.debug("session: init self: #{inspect(self())} with state: #{inspect(state)}")
     Process.monitor(state.linked_socket)
     Registry.register(Stoat.Sessions, state.user_id, state.session)
@@ -149,7 +150,10 @@ defmodule StoatGateway.Session do
         state.user_id
       )
 
-    user_ids = Map.get(state.data, "relations", [])
+    user_ids =
+      Map.get(state.data, "relations", [])
+      |> Map.new(fn %{"_id" => id} = data -> {id, data} end)
+
     self_status = Map.get(user, "status", %{})
 
     ready_payload = %Stoat.State.Ready{}
@@ -359,8 +363,10 @@ defmodule StoatGateway.Session do
 
   @spec build_ready_relations_from_state(map()) :: list(map())
   defp build_ready_relations_from_state(relations) do
-    Enum.map(relations, fn %{"_id" => id, "status" => relation_status} ->
-      user = Stoat.User.fetch_by_id(id)
+    users = Stoat.User.fetch_by_ids(Map.keys(relations))
+
+    Enum.map(relations, fn {id, %{"status" => relation_status}} ->
+      user = Map.get(users, id)
 
       presence =
         case StoatGateway.Presence.lookup(id) do
@@ -377,6 +383,7 @@ defmodule StoatGateway.Session do
 
   defp build_ready_user(user, relationship_status, {online, status}) do
     id = Map.get(user, "_id")
+
     %Stoat.PublicUser{
       relationship: relationship_status,
       username: Map.get(user, "username"),

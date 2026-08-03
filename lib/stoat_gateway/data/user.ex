@@ -17,6 +17,11 @@ defmodule Stoat.User do
     Mongo.find_one(:mongo_db, "users", %{_id: user_id})
   end
 
+  def fetch_by_ids(user_ids) when is_list(user_ids) do
+    Mongo.find(:mongo_db, "users", %{"_id" => %{"$in" => user_ids}})
+    |> Map.new(fn %{"_id" => id} = data -> {id, data} end)
+  end
+
   def fetch_server_memberships(user_id) do
     Mongo.find(:mongo_db, "server_members", %{
       "_id.user": user_id,
