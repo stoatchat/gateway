@@ -12,7 +12,6 @@ defmodule StoatGateway.Presence do
             dm_channels: %{},
             relationships: %{},
             sessions: [],
-            current_presence: nil,
             current_status: %{},
             last_event_id: 0,
             previous_presences: []
@@ -21,12 +20,13 @@ defmodule StoatGateway.Presence do
     GenServer.start_link(__MODULE__, state, name: {:via, Registry, {Stoat.Presence, user_id}})
   end
 
-  def supervised_start(id, dm_channels, relationships) do
+  def supervised_start(id, dm_channels, relationships, self_status) do
     state = %__MODULE__{
       user_id: id,
       dm_channels:
         dm_channels |> Enum.into(%{}, fn %{"_id" => id} = channel -> {id, channel} end),
-      relationships: relationships |> Enum.into(%{}, fn %{"_id" => id} = user -> {id, user} end)
+      relationships: relationships |> Enum.into(%{}, fn %{"_id" => id} = user -> {id, user} end),
+      current_status: self_status
     }
 
     DynamicSupervisor.start_child(Stoat.Presence.Supervisor, {StoatGateway.Presence, state})
@@ -51,7 +51,7 @@ defmodule StoatGateway.Presence do
     ensure_gdm_subscriptions(state.dm_channels)
     ensure_friend_subscriptions(state.relationships)
     ensure_online_set_subscription(state)
-    subscribers_dispatch(build_user_update(true, state), state)
+    subscribers_dispatch(build_user_update(true, state.current_status, state), state)
     {:noreply, state}
   end
 
@@ -99,6 +99,23 @@ defmodule StoatGateway.Presence do
     session_dispatch(payload, state)
     new_state = maybe_update_state(event, data, state)
     {:noreply, new_state}
+  end
+
+  def handle_info({:DEBUG_presence_fanout, status}, state) do
+    payload =
+      {:UserUpdate,
+       %{
+         "type" => :UserUpdate,
+         "id" => state.user_id,
+         "event_id" => Needle.ULID.generate(),
+         "data" => %{
+           "status" => %{"presence" => status}
+         },
+         "clear" => []
+       }}
+
+    subscribers_dispatch(payload, state)
+    {:noreply, state}
   end
 
   def handle_info(
@@ -231,14 +248,28 @@ defmodule StoatGateway.Presence do
 
   defp ensure_presences_size(presences), do: presences
 
-  defp build_user_update(presence, state) do
+  defp build_user_update(online, state) do
     {:UserUpdate,
      %{
        "type" => :UserUpdate,
        "id" => state.user_id,
        "event_id" => Needle.ULID.generate(),
        "data" => %{
-         "online" => presence
+         "online" => online
+       },
+       "clear" => []
+     }}
+  end
+
+  defp build_user_update(online, presence, state) do
+    {:UserUpdate,
+     %{
+       "type" => :UserUpdate,
+       "id" => state.user_id,
+       "event_id" => Needle.ULID.generate(),
+       "data" => %{
+         "online" => online,
+         "status" => %{"presence" => presence}
        },
        "clear" => []
      }}

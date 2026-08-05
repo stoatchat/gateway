@@ -257,6 +257,7 @@ defmodule StoatGateway.Session do
     )
 
     relationships = Map.get(state.data, "relations", [])
+    self_status = Map.get(state.data, "status", %{})
 
     presence_pid =
       case StoatGateway.Presence.lookup(state.user_id) do
@@ -265,7 +266,12 @@ defmodule StoatGateway.Session do
 
         _ ->
           {:ok, pid} =
-            StoatGateway.Presence.supervised_start(state.user_id, dm_channels, relationships)
+            StoatGateway.Presence.supervised_start(
+              state.user_id,
+              dm_channels,
+              relationships,
+              self_status
+            )
 
           pid
       end
@@ -402,7 +408,10 @@ defmodule StoatGateway.Session do
   end
 
   defp maybe_get_presence(user_id, _relation, %__MODULE__{} = _state) do
-    Logger.debug("session: build_ready_users -> maybe_get_presence: fetching presence for #{user_id}")
+    Logger.debug(
+      "session: build_ready_users -> maybe_get_presence: fetching presence for #{user_id}"
+    )
+
     case StoatGateway.Presence.lookup(user_id) do
       {:ok, pid} ->
         GenServer.call(pid, :fetch_presence_status)
