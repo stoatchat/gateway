@@ -97,8 +97,8 @@ defmodule StoatGateway.Server do
     {:noreply, state}
   end
 
-  def handle_info({:presence_update, payload}, state) do
-    fanout(payload, state.linked_sessions)
+  def handle_info({:presence_update, payload}, %__MODULE__{} = state) do
+    Enum.each(state.linked_sessions, &send(&1.pid, {:presence_roundabout, payload}))
     {:noreply, state}
   end
 

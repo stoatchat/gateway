@@ -320,6 +320,11 @@ defmodule StoatGateway.Session do
     {:noreply, %{state | linked_servers: [{id, pid, ref} | state.linked_servers]}}
   end
 
+  def handle_info({:presence_roundabout, payload}, %__MODULE__{} = state) do
+    send(state.linked_presence, {:presence_update, payload})
+    {:noreply, state}
+  end
+
   def handle_info({:DOWN, _ref, :process, pid, _}, %__MODULE__{} = state)
       when pid == state.linked_socket do
     Logger.debug(

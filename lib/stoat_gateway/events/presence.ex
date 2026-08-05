@@ -56,7 +56,10 @@ defmodule StoatGateway.Presence do
   end
 
   def handle_cast({:session_link_async, session_id, type, pid, status}, state) do
-    Logger.debug("presence: session link id=#{inspect(session_id)} pid=#{inspect(pid)}")
+    Logger.debug(
+      "presence(#{inspect(self())}): session link id=#{inspect(session_id)} pid=#{inspect(pid)}"
+    )
+
     ref = Process.monitor(pid)
 
     session = %{
@@ -139,6 +142,11 @@ defmodule StoatGateway.Presence do
     session_dispatch(payload, state)
     new_state = maybe_update_state(event, data, state)
     {:noreply, new_state}
+  end
+
+  def handle_info({:presence_update, {_, %{"id" => user_id}}}, state)
+      when user_id == state.user_id do
+    {:noreply, state}
   end
 
   def handle_info(
