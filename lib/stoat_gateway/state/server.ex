@@ -66,7 +66,7 @@ defmodule StoatGateway.Server do
       roles: Map.get(member_data, "roles", [])
     }
 
-    if not user_session_exists?(session, state.linked_sessions) do
+    if not user_session_exists?(user_id, state.linked_sessions) do
       :pg.join(:presence, user_id, self())
     end
 
@@ -364,9 +364,9 @@ defmodule StoatGateway.Server do
     Enum.each(sessions, &send(&1.pid, {:socket_dispatch, event}))
   end
 
-  defp user_session_exists?(user, sessions) do
+  defp user_session_exists?(user_id, sessions) do
     Enum.any?(sessions, fn session ->
-      user == session.user_id
+      user_id == session.user_id
     end)
   end
 
