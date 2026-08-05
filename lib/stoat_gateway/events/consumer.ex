@@ -105,6 +105,7 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("VoiceChannelJoin", data), do: handle_channel_event(:VoiceChannelJoin, data)
   def handle_event("VoiceChannelLeave", data), do: handle_channel_event(:VoiceChannelLeave, data)
   def handle_event("VoiceChannelMove", data), do: handle_channel_event(:VoiceChannelMove, data)
+  def handle_event("UserMoveVoiceChannel", data), do: handle_presence_event(:UserMoveVoiceChannel, data)
 
   def handle_event("VoiceCallUpdate", {route, %{"channel_id" => channel_id}} = data)
       when route == channel_id do
