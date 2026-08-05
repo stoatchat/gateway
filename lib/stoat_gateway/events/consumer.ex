@@ -24,7 +24,8 @@ defmodule StoatGateway.Events.Consumer do
   end
 
   defp decode_message!(data) when is_binary(data) do
-    data |> Jason.decode()
+    # Maybe switch to binary_term/2 with safe - does incur a performance hit
+    :erlang.binary_to_term(data)
   end
 
   @impl true
@@ -35,7 +36,7 @@ defmodule StoatGateway.Events.Consumer do
   end
 
   defp process_message(
-         %Broadway.Message{data: {:ok, data}, metadata: %{headers: headers}} =
+         %Broadway.Message{data: data, metadata: %{headers: headers}} =
            message
        ) do
     route_key =
@@ -49,12 +50,6 @@ defmodule StoatGateway.Events.Consumer do
     message
   end
 
-  defp process_message(%Broadway.Message{data: {:error, reason}} = message) do
-    Logger.error("Error Processing message error=#{reason}")
-    IO.inspect(reason)
-    message
-  end
-
   # p_broadcast: events with an array of channels
   def process_event(%{"type" => event_type} = data, route_keys) when is_list(route_keys) do
     :telemetry.execute([:gateway, :consumer, :process], %{}, %{event: event_type, type: :bulk})
@@ -62,7 +57,7 @@ defmodule StoatGateway.Events.Consumer do
     Keyword.values(route_keys)
     |> Enum.each(&handle_event(event_type, {&1, data}))
   end
-  
+
   # p: single channel events
   def process_event(%{"type" => event_type} = data, route_key) do
     :telemetry.execute([:gateway, :consumer, :process], %{}, %{event: event_type, type: :single})
