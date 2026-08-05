@@ -182,11 +182,11 @@ defmodule StoatGateway.Presence do
   end
 
   # Update self-status for presence fetches in ready payload
-  defp maybe_update_state(:Userupdate, %{"data" => %{"status" => new_status}}, state) do
+  defp maybe_update_state(:UserUpdate, %{"data" => %{"status" => new_status}}, state) do
     %{state | current_status: new_status}
   end
 
-  defp maybe_update_state(:Userupdate, %{"clear" => ["StatusText"]}, state) do
+  defp maybe_update_state(:UserUpdate, %{"clear" => ["StatusText"]}, state) do
     %{state | current_status: Map.delete(state.current_status, "text")}
   end
 

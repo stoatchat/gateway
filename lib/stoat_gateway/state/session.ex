@@ -361,7 +361,7 @@ defmodule StoatGateway.Session do
     end
   end
 
-  @spec build_ready_relations_from_state(map(), __MODULE__) :: list(map())
+  @spec build_ready_relations_from_state(map(), __MODULE__.t()) :: list(map())
   defp build_ready_relations_from_state(relations, state) do
     users = Stoat.User.fetch_by_ids(Map.keys(relations))
 
@@ -391,7 +391,7 @@ defmodule StoatGateway.Session do
     }
   end
 
-  # Presence fetch transform based on relation: 
+  # Presence fetch transform based on relation:
   # https://github.com/stoatchat/stoatchat/blob/main/crates/core/database/src/util/bridge/v0.rs#L1084
   defp maybe_get_presence(_user_id, _relation, %__MODULE__{type: :bot} = _state) do
     {false, %{}}

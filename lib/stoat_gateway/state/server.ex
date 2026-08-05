@@ -135,7 +135,13 @@ defmodule StoatGateway.Server do
 
     updated =
       Enum.reduce(clear, data, fn key, server ->
-        Map.put(server, String.downcase(key), "")
+        Map.delete(server, case key do
+          :Description -> "description"
+          :Categories -> "categories"
+          :SystemMessages -> "system_messages"
+          :Icon -> "icon"
+          :Banner -> "banner"
+        end)
       end)
 
     updated_state = %{state | data: updated}
@@ -229,10 +235,11 @@ defmodule StoatGateway.Server do
           Map.delete(
             channel,
             case key do
-              "Description" -> "description"
-              "Icon" -> "icon"
-              "DefaultPermissions" -> "default_permissions"
-              "Voice" -> "voice"
+              :Description -> "description"
+              :Icon -> "icon"
+              :DefaultPermissions -> "default_permissions"
+              :Voice -> "voice"
+              :Slowmode -> "slowmode"
             end
           )
         end)
@@ -240,7 +247,7 @@ defmodule StoatGateway.Server do
       end)
 
     default_permissions =
-      Map.has_key?(data, "default_permissions") || Enum.member?(clear, "DefaultPermissions")
+      Map.has_key?(data, "default_permissions") || Enum.member?(clear, :DefaultPermissions)
 
     role_permissions = Map.get(data, "role_permissions")
 
