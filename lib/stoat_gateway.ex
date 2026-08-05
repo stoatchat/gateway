@@ -11,6 +11,10 @@ defmodule StoatGateway do
        name: Stoat.Metrics.Peep,
        metrics: [
          last_value("vm.memory.total", unit: :byte),
+         counter("gateway.session.init.count",
+           event_name: [:gateway, :session, :init],
+           tags: [:type]
+         ),
          counter("gateway.consumer.process.count",
            event_name: [:gateway, :consumer, :process],
            tags: [:event, :type]
