@@ -251,10 +251,12 @@ defmodule StoatGateway.Session do
      }}
   end
 
-  def handle_cast({:presence_init_link, dm_channels}, state) do
+  def handle_cast({:presence_init_link, dm_channels}, %__MODULE__{} = state) do
     Logger.debug(
       "session=#{state.session} init presence link with channels #{inspect(dm_channels)}"
     )
+
+    Redix.command(:redix, ["SADD", "sessions:#{state.user_id}", state.session])
 
     relationships = Map.get(state.data, "relations", [])
     self_status = Map.get(state.data, "status", %{})
@@ -504,8 +506,10 @@ defmodule StoatGateway.Session do
   end
 
   # Clean-up important state
-  def terminate(_reason, state),
-    do: Registry.unregister_match(Stoat.Sessions, state.user_id, state.session)
+  def terminate(_reason, state) do
+    Registry.unregister_match(Stoat.Sessions, state.user_id, state.session)
+    Redix.command(:redix, ["SREM", "sessions:#{state.user_id}", state.session])
+  end
 
   def code_change(_old_vsn, state, _extra), do: {:ok, state}
 end

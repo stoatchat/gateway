@@ -112,12 +112,14 @@ defmodule StoatGateway.Presence do
          "id" => state.user_id,
          "event_id" => Needle.ULID.generate(),
          "data" => %{
-           "status" => %{"presence" => status}
+           "status" => %{"presence" => status},
+           "online" => true
          },
          "clear" => []
        }}
 
     subscribers_dispatch(payload, state)
+    session_dispatch(payload, state)
     {:noreply, state}
   end
 
@@ -132,6 +134,7 @@ defmodule StoatGateway.Presence do
       {:noreply, state}
     else
       subscribers_dispatch(payload, state)
+      session_dispatch(payload, state)
       state = maybe_update_state(:UserUpdate, data, state)
       {:noreply, %{state | last_event_id: event_id}}
     end
@@ -232,7 +235,7 @@ defmodule StoatGateway.Presence do
     end)
   end
 
-  defp ensure_online_set_subscription(state) do
+  defp ensure_online_set_subscription(%__MODULE__{} = state) do
     Redix.command(:redix, ["SADD", "online", state.user_id])
   end
 
