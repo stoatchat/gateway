@@ -160,10 +160,12 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("UserSlowmodes", data), do: handle_presence_event(:UserSlowmodes, data)
 
   def handle_event("UserSettingsUpdate", data),
-    do: handle_presence_event(:UserSettingsUpdate, data)
+  do: handle_presence_event(:UserSettingsUpdate, data)
 
   def handle_event("UserRelationship", data), do: handle_presence_event(:UserRelationship, data)
   def handle_event("UserPlatformWipe", _data), do: nil
+
+  def handle_event("Bees", data), do: handle_presence_event(:Bees, data)
 
   def handle_event(event, data) do
     Logger.info("Unhandled event=#{event} data=#{inspect(data)}")
