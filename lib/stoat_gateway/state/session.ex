@@ -136,7 +136,12 @@ defmodule StoatGateway.Session do
         {server_id, pid, ref}
       end)
 
-    servers = Stoat.Server.fetch_many(server_ids)
+    servers =
+      Stoat.Server.fetch_many(server_ids)
+      |> Enum.map(fn %{"_id" => id} = server ->
+        count = Stoat.Server.fetch_approximate_user_count(id)
+        Map.put(server, "approximate_member_count", count)
+      end)
 
     channel_ids = servers |> Enum.flat_map(& &1["channels"])
     user_channels = Stoat.User.fetch_user_channels(state.user_id)

@@ -18,4 +18,22 @@ defmodule Stoat.Server do
   def find_emojis_by_many(server_ids) when is_list(server_ids) do
     Mongo.find(:mongo_db, "emojis", %{"parent.id": %{"$in": server_ids}}) |> Enum.to_list()
   end
+
+  @spec fetch_approximate_user_count(binary()) :: binary()
+  def fetch_approximate_user_count(id) when is_binary(id) do
+    case Redix.command(:redix, ["GET", "member_count:#{id}"]) do
+      {:ok, nil} ->
+        {:ok, count} =
+          Mongo.count_documents(:mongo_db, "server_members", %{
+            "_id.server" => id,
+            "pending_deletion_at" => %{"$exists" => false}
+          })
+
+        Redix.command(:redix, ["SET", "member_count:#{id}", count, "EX", "3600"])
+        count
+
+      {:ok, value} when is_binary(value) ->
+        String.to_integer(value)
+    end
+  end
 end
