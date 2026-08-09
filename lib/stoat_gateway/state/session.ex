@@ -18,7 +18,7 @@ defmodule StoatGateway.Session do
   use GenServer, restart: :transient
   require Logger
   # Arbitrary 20s timeout to resume
-  @socket_disconnect_timeout 20_000
+  @socket_disconnect_timeout 5_000
 
   defstruct ready: false,
             ready_fields: %ReadyFields{},
@@ -93,8 +93,8 @@ defmodule StoatGateway.Session do
   @spec lookup(binary(), binary()) :: {:ok, pid()} | {:error, atom()}
   def lookup(id, session_id) do
     case Registry.match(Stoat.Sessions, id, session_id) do
-      [{presence_pid, nil}] ->
-        {:ok, presence_pid}
+      [{session_pid, nil}] ->
+        {:ok, session_pid}
 
       _ ->
         {:error, :not_found}

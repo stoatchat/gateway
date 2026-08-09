@@ -272,7 +272,7 @@ defmodule StoatGateway.Presence do
      }}
   end
 
-  defp build_user_update(online, presence, state) do
+  defp build_user_update(online, status, state) do
     {:UserUpdate,
      %{
        "type" => :UserUpdate,
@@ -280,7 +280,7 @@ defmodule StoatGateway.Presence do
        "event_id" => Needle.ULID.generate(),
        "data" => %{
          "online" => online,
-         "status" => %{"presence" => presence}
+         "status" => status
        },
        "clear" => []
      }}
