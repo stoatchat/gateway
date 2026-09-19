@@ -25,12 +25,22 @@ defmodule StoatGateway do
          url: Application.get_env(:stoat_gateway, :mongodb),
          database: "revolt",
          pool_size: 2
-       ]},
+       ] ++ mongo_ssl_opts()},
       {Redix, {Application.get_env(:stoat_gateway, :redis), [name: :redix]}},
       StoatGateway.Events.Consumer
     ]
 
     opts = [strategy: :one_for_one, name: StoatGateway.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp mongo_ssl_opts do
+    with url when is_binary(url) <- Application.get_env(:stoat_gateway, :mongodb),
+         query when is_binary(query) <- URI.parse(url).query,
+         %{"tlsCAFile" => ca_file} <- URI.decode_query(query) do
+      [ssl_opts: [cacertfile: ca_file]]
+    else
+      _ -> []
+    end
   end
 end
