@@ -7,7 +7,7 @@ ENV MIX_ENV=prod
 
 RUN mix local.hex --force && mix local.rebar --force
 
-ADD mix.exs mix.lock /app
+ADD mix.exs mix.lock /app/
 RUN mix deps.get --only prod
 RUN mix deps.compile
 
