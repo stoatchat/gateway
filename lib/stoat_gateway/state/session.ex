@@ -390,7 +390,10 @@ defmodule StoatGateway.Session do
 
       build_ready_user(user, relation_status, online, status)
     end)
+    |> Enum.reject(&is_nil/1)
   end
+
+  defp build_ready_user(_user, "BlockedOther", _online, _status), do: nil
 
   defp build_ready_user(user, relationship_status, online, status) do
     id = Map.get(user, "_id")
