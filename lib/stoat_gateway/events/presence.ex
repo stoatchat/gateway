@@ -12,7 +12,6 @@ defmodule StoatGateway.Presence do
             dm_channels: %{},
             relationships: %{},
             sessions: [],
-            current_presence: nil,
             current_status: %{},
             last_event_id: 0,
             previous_presences: []
@@ -21,12 +20,13 @@ defmodule StoatGateway.Presence do
     GenServer.start_link(__MODULE__, state, name: {:via, Registry, {Stoat.Presence, user_id}})
   end
 
-  def supervised_start(id, dm_channels, relationships) do
+  def supervised_start(id, dm_channels, relationships, self_status) do
     state = %__MODULE__{
       user_id: id,
       dm_channels:
         dm_channels |> Enum.into(%{}, fn %{"_id" => id} = channel -> {id, channel} end),
-      relationships: relationships |> Enum.into(%{}, fn %{"_id" => id} = user -> {id, user} end)
+      relationships: relationships |> Enum.into(%{}, fn %{"_id" => id} = user -> {id, user} end),
+      current_status: self_status
     }
 
     DynamicSupervisor.start_child(Stoat.Presence.Supervisor, {StoatGateway.Presence, state})
@@ -51,11 +51,15 @@ defmodule StoatGateway.Presence do
     ensure_gdm_subscriptions(state.dm_channels)
     ensure_friend_subscriptions(state.relationships)
     ensure_online_set_subscription(state)
+    subscribers_dispatch(build_user_update(true, state.current_status, state), state)
     {:noreply, state}
   end
 
   def handle_cast({:session_link_async, session_id, type, pid, status}, state) do
-    Logger.debug("presence: session link id=#{inspect(session_id)} pid=#{inspect(pid)}")
+    Logger.debug(
+      "presence(#{inspect(self())}): session link id=#{inspect(session_id)} pid=#{inspect(pid)}"
+    )
+
     ref = Process.monitor(pid)
 
     session = %{
@@ -100,6 +104,25 @@ defmodule StoatGateway.Presence do
     {:noreply, new_state}
   end
 
+  def handle_info({:DEBUG_presence_fanout, status}, state) do
+    payload =
+      {:UserUpdate,
+       %{
+         "type" => :UserUpdate,
+         "id" => state.user_id,
+         "event_id" => Needle.ULID.generate(),
+         "data" => %{
+           "status" => %{"presence" => status},
+           "online" => true
+         },
+         "clear" => []
+       }}
+
+    subscribers_dispatch(payload, state)
+    session_dispatch(payload, state)
+    {:noreply, state}
+  end
+
   def handle_info(
         {:presence_event_dispatch, {:UserUpdate, %{"id" => user_id} = data} = payload},
         state
@@ -110,8 +133,8 @@ defmodule StoatGateway.Presence do
     if event_id == state.last_event_id do
       {:noreply, state}
     else
-      subscribers = :pg.get_members(:presence, state.user_id)
-      Enum.each(subscribers, &send(&1, {:presence_update, payload}))
+      subscribers_dispatch(payload, state)
+      session_dispatch(payload, state)
       state = maybe_update_state(:UserUpdate, data, state)
       {:noreply, %{state | last_event_id: event_id}}
     end
@@ -122,6 +145,11 @@ defmodule StoatGateway.Presence do
     session_dispatch(payload, state)
     new_state = maybe_update_state(event, data, state)
     {:noreply, new_state}
+  end
+
+  def handle_info({:presence_update, {_, %{"id" => user_id}}}, state)
+      when user_id == state.user_id do
+    {:noreply, state}
   end
 
   def handle_info(
@@ -182,11 +210,11 @@ defmodule StoatGateway.Presence do
   end
 
   # Update self-status for presence fetches in ready payload
-  defp maybe_update_state(:Userupdate, %{"data" => %{"status" => new_status}}, state) do
+  defp maybe_update_state(:UserUpdate, %{"data" => %{"status" => new_status}}, state) do
     %{state | current_status: new_status}
   end
 
-  defp maybe_update_state(:Userupdate, %{"clear" => ["StatusText"]}, state) do
+  defp maybe_update_state(:UserUpdate, %{"clear" => ["StatusText"]}, state) do
     %{state | current_status: Map.delete(state.current_status, "text")}
   end
 
@@ -207,7 +235,7 @@ defmodule StoatGateway.Presence do
     end)
   end
 
-  defp ensure_online_set_subscription(state) do
+  defp ensure_online_set_subscription(%__MODULE__{} = state) do
     Redix.command(:redix, ["SADD", "online", state.user_id])
   end
 
@@ -215,8 +243,14 @@ defmodule StoatGateway.Presence do
     Enum.each(state.sessions, &send(&1.pid, {:socket_dispatch, payload}))
   end
 
+  defp subscribers_dispatch(payload, state) do
+    subscribers = :pg.get_members(:presence, state.user_id)
+    Enum.each(subscribers, &send(&1, {:presence_update, payload}))
+  end
+
   def terminate(_, state) do
     Redix.command(:redix, ["SREM", "online", state.user_id])
+    subscribers_dispatch(build_user_update(false, state), state)
   end
 
   defp ensure_presences_size(presences) when length(presences) > @maximum_previous_presences do
@@ -224,6 +258,33 @@ defmodule StoatGateway.Presence do
   end
 
   defp ensure_presences_size(presences), do: presences
+
+  defp build_user_update(online, state) do
+    {:UserUpdate,
+     %{
+       "type" => :UserUpdate,
+       "id" => state.user_id,
+       "event_id" => Needle.ULID.generate(),
+       "data" => %{
+         "online" => online
+       },
+       "clear" => []
+     }}
+  end
+
+  defp build_user_update(online, status, state) do
+    {:UserUpdate,
+     %{
+       "type" => :UserUpdate,
+       "id" => state.user_id,
+       "event_id" => Needle.ULID.generate(),
+       "data" => %{
+         "online" => online,
+         "status" => status
+       },
+       "clear" => []
+     }}
+  end
 
   def code_change(_old_vsn, state, _extra), do: {:ok, state}
 end

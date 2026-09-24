@@ -24,7 +24,8 @@ defmodule StoatGateway.Events.Consumer do
   end
 
   defp decode_message!(data) when is_binary(data) do
-    data |> Jason.decode()
+    # Maybe switch to binary_term/2 with safe - does incur a performance hit
+    :erlang.binary_to_term(data)
   end
 
   @impl true
@@ -35,31 +36,41 @@ defmodule StoatGateway.Events.Consumer do
   end
 
   defp process_message(
-         %Broadway.Message{data: {:ok, data}, metadata: %{headers: [{"c", _, route_key}]}} =
+         %Broadway.Message{data: data, metadata: %{headers: headers}} =
            message
        ) do
+    route_key =
+      Enum.find_value(headers, fn {"c", _, route_key} -> route_key end)
+
+    Logger.debug(
+      "consumer: process_event: route_key=#{inspect(route_key)} event=#{inspect(data)}"
+    )
+
     process_event(data, route_key)
     message
   end
 
-  defp process_message(%Broadway.Message{data: {:error, reason}} = message) do
-    Logger.error("Error Processing message error=#{reason}")
-    IO.inspect(reason)
-    message
+  # p_broadcast: events with an array of channels
+  def process_event(%{"type" => event_type} = data, route_keys) when is_list(route_keys) do
+    :telemetry.execute([:gateway, :consumer, :process], %{}, %{event: event_type, type: :bulk})
+
+    Keyword.values(route_keys)
+    |> Enum.each(&handle_event(event_type, {&1, data}))
   end
 
-  # NOTE: We use the `c` header in RMQ to match the intended channel from Delta
+  # p: single channel events
   def process_event(%{"type" => event_type} = data, route_key) do
-    # TODO: wrap telemetry and otel context around this
-    #Logger.debug("consumer: channel header: #{inspect(route_key)} for event #{event_type}")
-    # TODO: Hack-fix, i hate this whole handling
-    # perhaps we can get a type header and just route events based on that
+    :telemetry.execute([:gateway, :consumer, :process], %{}, %{event: event_type, type: :single})
     handle_event(event_type, {route_key, data})
   end
 
   # Custom logic to pattern handle messages in servers & dm channels
   def handle_event("Message", {_, %{"member" => %{"_id" => %{"server" => server_id}}} = data}) do
     server_fanout(server_id, {:Message, data})
+  end
+
+  def handle_event("Message", {_, %{"system" => _system}}=data) do
+    handle_channel_event(:Message, data)
   end
 
   def handle_event("Message", {_, %{"channel" => channel_id} = data}) do
@@ -89,19 +100,19 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("ChannelUpdate", data), do: handle_channel_event(:ChannelUpdate, data)
   def handle_event("ChannelDelete", data), do: handle_channel_event(:ChannelDelete, data)
   def handle_event("ChannelGroupLeave", data), do: handle_channel_event(:ChannelGroupleave, data)
-
-  def handle_event("ChannelGroupJoin", {_, %{"recipients" => recipients} = data}) do
-    Enum.each(recipients, fn user_id ->
-      case StoatGateway.Presence.lookup(user_id) do
-        {:ok, pid} -> send(pid, {:presence_event_dispatch, {:ChannelGroupJoin, data}})
-        _ -> nil
-      end
-    end)
-  end
+  def handle_event("ChannelGroupJoin", data), do: handle_channel_event(:ChannelGroupJoin, data)
 
   def handle_event("VoiceChannelJoin", data), do: handle_channel_event(:VoiceChannelJoin, data)
   def handle_event("VoiceChannelLeave", data), do: handle_channel_event(:VoiceChannelLeave, data)
   def handle_event("VoiceChannelMove", data), do: handle_channel_event(:VoiceChannelMove, data)
+  def handle_event("UserMoveVoiceChannel", data), do: handle_presence_event(:UserMoveVoiceChannel, data)
+
+  def handle_event("VoiceCallUpdate", {route, %{"channel_id" => channel_id}} = data)
+      when route == channel_id do
+    handle_channel_event(:VoiceCallUpdate, data)
+  end
+
+  def handle_event("VoiceCallUpdate", data), do: handle_presence_event(:VoiceCallUpdate, data)
 
   def handle_event("WebhookCreate", data), do: handle_channel_event(:WebhookCreate, data)
   def handle_event("WebhookUpdate", data), do: handle_channel_event(:WebhookUpdate, data)
@@ -127,7 +138,7 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("ServerMemberUpdate", data), do: handle_server_event(:ServerMemberUpdate, data)
   def handle_event("ServerMemberJoin", data), do: handle_server_event(:ServerMemberJoin, data)
 
-  def handle_event("ServerMemberLeave", {_, %{"user" => user_id}=payload}=data) do
+  def handle_event("ServerMemberLeave", {_, %{"user" => user_id} = payload} = data) do
     handle_server_event(:ServerMemberLeave, data)
     handle_presence_event(:ServerMemberLeave, {user_id, payload})
   end
@@ -149,10 +160,12 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("UserSlowmodes", data), do: handle_presence_event(:UserSlowmodes, data)
 
   def handle_event("UserSettingsUpdate", data),
-    do: handle_presence_event(:UserSettingsUpdate, data)
+  do: handle_presence_event(:UserSettingsUpdate, data)
 
   def handle_event("UserRelationship", data), do: handle_presence_event(:UserRelationship, data)
   def handle_event("UserPlatformWipe", _data), do: nil
+
+  def handle_event("Bees", data), do: handle_presence_event(:Bees, data)
 
   def handle_event(event, data) do
     Logger.info("Unhandled event=#{event} data=#{inspect(data)}")
@@ -161,15 +174,17 @@ defmodule StoatGateway.Events.Consumer do
   def parse_channel_id(%{"channel" => channel_id}), do: channel_id
   def parse_channel_id(%{"channel_id" => channel_id}), do: channel_id
   def parse_channel_id(%{"id" => channel_id}), do: channel_id
+  def parse_channel_id(%{"_id" => channel_id}), do: channel_id
   def parse_channel_id(%{id: channel_id}), do: channel_id
 
-  def is_channel_event?(:MessageCreate), do: true
+  def is_channel_event?(:Message), do: true
   def is_channel_event?(:MessageAppend), do: true
   def is_channel_event?(:MessageUpdate), do: true
   def is_channel_event?(:MessageDelete), do: true
   def is_channel_event?(:MessageReact), do: true
   def is_channel_event?(:MessageUnreact), do: true
   def is_channel_event?(:MessageRemoveReaction), do: true
+  def is_channel_event?(:ChannelCreate), do: true
   def is_channel_event?(:ChannelUpdate), do: true
   def is_channel_event?(:ChannelDelete), do: true
   def is_channel_event?(:ChannelStartTyping), do: true
@@ -177,6 +192,7 @@ defmodule StoatGateway.Events.Consumer do
   def is_channel_event?(:VoiceChannelJoin), do: true
   def is_channel_event?(:VoiceChannelLeave), do: true
   def is_channel_event?(:VoiceChannelMove), do: true
+  def is_channel_event?(:VoiceCallUpdate), do: true
   def is_channel_event?(:UserVoiceStateUpdate), do: true
   def is_channel_event?(:WebhookCreate), do: true
   def is_channel_event?(:WebhookUpdate), do: true

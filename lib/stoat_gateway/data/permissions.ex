@@ -115,14 +115,6 @@ defmodule Stoat.Permissions do
     permissions_for_guild_channel(channel, member, server)
   end
 
-  def permissions_for_channel(
-        %{"channel_type" => "VoiceChannel"} = channel,
-        member,
-        server
-      ) do
-    permissions_for_guild_channel(channel, member, server)
-  end
-
   def permissions_for_guild_channel(
         channel,
         %{"_id" => %{"user" => member_id}} = member,
