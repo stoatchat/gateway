@@ -42,10 +42,6 @@ defmodule StoatGateway.Events.Consumer do
     route_key =
       Enum.find_value(headers, fn {"c", _, route_key} -> route_key end)
 
-    Logger.debug(
-      "consumer: process_event: route_key=#{inspect(route_key)} event=#{inspect(data)}"
-    )
-
     process_event(data, route_key)
     message
   end
@@ -69,7 +65,7 @@ defmodule StoatGateway.Events.Consumer do
     server_fanout(server_id, {:Message, data})
   end
 
-  def handle_event("Message", {_, %{"system" => _system}}=data) do
+  def handle_event("Message", {_, %{"system" => _system}} = data) do
     handle_channel_event(:Message, data)
   end
 
@@ -105,7 +101,9 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("VoiceChannelJoin", data), do: handle_channel_event(:VoiceChannelJoin, data)
   def handle_event("VoiceChannelLeave", data), do: handle_channel_event(:VoiceChannelLeave, data)
   def handle_event("VoiceChannelMove", data), do: handle_channel_event(:VoiceChannelMove, data)
-  def handle_event("UserMoveVoiceChannel", data), do: handle_presence_event(:UserMoveVoiceChannel, data)
+
+  def handle_event("UserMoveVoiceChannel", data),
+    do: handle_presence_event(:UserMoveVoiceChannel, data)
 
   def handle_event("VoiceCallUpdate", {route, %{"channel_id" => channel_id}} = data)
       when route == channel_id do
@@ -160,7 +158,7 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("UserSlowmodes", data), do: handle_presence_event(:UserSlowmodes, data)
 
   def handle_event("UserSettingsUpdate", data),
-  do: handle_presence_event(:UserSettingsUpdate, data)
+    do: handle_presence_event(:UserSettingsUpdate, data)
 
   def handle_event("UserRelationship", data), do: handle_presence_event(:UserRelationship, data)
   def handle_event("UserPlatformWipe", _data), do: nil
