@@ -72,8 +72,8 @@ defmodule Stoat.Permissions do
           server = Enum.find(servers, fn %{"_id" => id} -> id == server_id end)
 
           member =
-            Enum.find(members, fn %{"_id" => %{"server" => server_id}} ->
-              server_id == server_id
+            Enum.find(members, fn %{"_id" => %{"server" => id}} ->
+              id == server_id
             end)
 
           permissions_for_channel(channel, member, server)
