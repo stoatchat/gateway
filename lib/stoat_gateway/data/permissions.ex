@@ -112,10 +112,10 @@ defmodule Stoat.Permissions do
         member,
         server
       ) do
-    permissions_for_guild_channel(channel, member, server)
+    permissions_for_server_channel(channel, member, server)
   end
 
-  def permissions_for_guild_channel(
+  def permissions_for_server_channel(
         channel,
         %{"_id" => %{"user" => member_id}} = member,
         server
@@ -129,12 +129,24 @@ defmodule Stoat.Permissions do
         default_permissisons = Map.get(channel, "default_permissions", default_permissions_map())
         calculated = apply_channel_overwrites(calculated, default_permissisons)
 
+        if channel == "01GYW3SW1WJQEXTFKTG9FKB253" do
+          Logger.debug(
+            "permissions_for_server_channel: team channel- pre role overrides: #{calculated}"
+          )
+        end
+
         role_permissions = Map.get(channel, "role_permissions", %{})
 
         Enum.reduce(Map.get(member, "roles", []), calculated, fn role_id, acc ->
           role = Map.get(role_permissions, role_id, default_permissions_map())
 
-          Bitwise.bor(acc, calculate_permissions(role))
+          value = Bitwise.bor(acc, calculate_permissions(role))
+
+          if channel == "01GYW3SW1WJQEXTFKTG9FKB253" do
+            Logger.debug("permissions_for_server_channel: reduce value: #{value}")
+          end
+
+          value
         end)
     end
   end
@@ -152,7 +164,7 @@ defmodule Stoat.Permissions do
   end
 
   def permissions_for_member(_member, server) do
-      Map.get(server, "default_permissions", Stoat.Permissions.Bits.server_default())
+    Map.get(server, "default_permissions", Stoat.Permissions.Bits.server_default())
   end
 
   defp calculate_final_permissions(default, roles) when length(roles) > 0,
