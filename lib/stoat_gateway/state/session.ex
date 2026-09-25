@@ -307,6 +307,21 @@ defmodule StoatGateway.Session do
     {:noreply, state}
   end
 
+  def handle_info(
+        {:socket_dispatch, {:UserSettingsUpdate, body}},
+        %{linked_socket: socket} = state
+      )
+      when is_pid(socket) do
+    new_body =
+      Map.update!(body, "update", fn update ->
+        Map.new(update, fn {k, v} -> {k, Tuple.to_list(v)} end)
+      end)
+
+    send(socket, {:event_dispatch_raw, new_body})
+
+    {:noreply, state}
+  end
+
   def handle_info({:socket_dispatch, {_event, body}}, %{linked_socket: socket} = state)
       when is_pid(socket) do
     send(socket, {:event_dispatch_raw, body})
