@@ -146,7 +146,7 @@ defmodule Stoat.Permissions do
 
           if channel_id == "01GYW3SW1WJQEXTFKTG9FKB253" do
             Logger.debug(
-              "permissions_for_server_channel: target role: #{role_id} reduce value: #{value}:#{role}"
+              "permissions_for_server_channel: target role: #{role_id} reduce value: #{value}:#{inspect(role)}"
             )
           end
 
