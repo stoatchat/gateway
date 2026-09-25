@@ -133,7 +133,7 @@ defmodule Stoat.Permissions do
 
         if channel_id == "01GYW3SW1WJQEXTFKTG9FKB253" do
           Logger.debug(
-            "permissions_for_server_channel: team channel- pre role overrides: #{calculated}"
+            "permissions_for_server_channel: team channel- pre role overrides: #{calculated} member:#{inspect(member)} channel:#{inspect(channel)}"
           )
         end
 
@@ -145,7 +145,9 @@ defmodule Stoat.Permissions do
           value = Bitwise.bor(acc, calculate_permissions(role))
 
           if channel_id == "01GYW3SW1WJQEXTFKTG9FKB253" do
-            Logger.debug("permissions_for_server_channel: reduce value: #{value}")
+            Logger.debug(
+              "permissions_for_server_channel: target role: #{role_id} reduce value: #{value}:#{role}"
+            )
           end
 
           value
