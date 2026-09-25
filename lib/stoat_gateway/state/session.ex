@@ -123,8 +123,8 @@ defmodule StoatGateway.Session do
         # v2: we'll reduce DB calls and initially send server_ids as unavailable
         # as servers are started the membership process will cause ServerAvailable events to get fired
         member =
-          Enum.find(memberships, fn %{"_id" => %{"server" => server_id}} ->
-            server_id == server_id
+          Enum.find(memberships, fn %{"_id" => %{"server" => sid}} ->
+            sid == server_id
           end)
 
         GenServer.cast(
@@ -312,6 +312,7 @@ defmodule StoatGateway.Session do
         %{linked_socket: socket} = state
       )
       when is_pid(socket) do
+    # NOTE: Add a tuple to list in our no null field Jason Decoder
     new_body =
       Map.update!(body, "update", fn update ->
         Map.new(update, fn {k, v} -> {k, Tuple.to_list(v)} end)
