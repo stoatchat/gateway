@@ -13,7 +13,9 @@ config :stoat_gateway,
   revolt: %{
     "api" => %{
       "users" => %{
-        "early_adopter_cutoff" => 1784761200
-      }  
+        "early_adopter_cutoff" => 1_784_761_200
+      }
     }
   }
+
+config :opentelemetry, traces_exporter: {:otel_exporter_stdout, []}

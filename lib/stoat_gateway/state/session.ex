@@ -16,6 +16,8 @@ end
 defmodule StoatGateway.Session do
   alias StoatGateway.Web.ReadyFields
   use GenServer, restart: :transient
+  require OpenTelemetry.Tracer, as: Tracer
+  require OpenTelemetry.Span
   require Logger
   # Arbitrary 20s timeout to resume
   @socket_disconnect_timeout 5_000
@@ -111,149 +113,160 @@ defmodule StoatGateway.Session do
     {:ok, state, {:continue, :ready}}
   end
 
-  def handle_continue(:ready, state) do
-    user = Stoat.User.fetch_by_id(state.user_id)
-    state = %{state | data: user}
-    memberships = Stoat.User.fetch_server_memberships(state.user_id)
-    server_ids = Stoat.User.server_ids_from_memberships(memberships)
+  def handle_continue(:ready, state = %__MODULE__{}) do
+    Tracer.with_span :handle_continue_ready do
+      Tracer.set_attribute("session.id", state.session)
+      Tracer.set_attribute("user.id", state.user_id)
+      user = Stoat.User.fetch_by_id(state.user_id)
+      state = %{state | data: user}
+      memberships = Stoat.User.fetch_server_memberships(state.user_id)
+      server_ids = Stoat.User.server_ids_from_memberships(memberships)
 
-    server_pids =
-      Enum.map(server_ids, fn server_id ->
-        {:ok, pid} = StoatGateway.Server.lookup_or_start(server_id)
-        # v2: we'll reduce DB calls and initially send server_ids as unavailable
-        # as servers are started the membership process will cause ServerAvailable events to get fired
-        member =
-          Enum.find(memberships, fn %{"_id" => %{"server" => sid}} ->
-            sid == server_id
-          end)
+      server_pids =
+        Enum.map(server_ids, fn server_id ->
+          {:ok, pid} = StoatGateway.Server.lookup_or_start(server_id)
+          # v2: we'll reduce DB calls and initially send server_ids as unavailable
+          # as servers are started the membership process will cause ServerAvailable events to get fired
+          member =
+            Enum.find(memberships, fn %{"_id" => %{"server" => sid}} ->
+              sid == server_id
+            end)
 
-        GenServer.cast(
-          pid,
-          {:session_link_async, state.session, state.type, state.user_id, self(), member}
+          GenServer.cast(
+            pid,
+            {:session_link_async, state.session, state.type, state.user_id, self(), member}
+          )
+
+          Tracer.add_event("server.session_link_async", %{server_id: server_id})
+
+          ref = Process.monitor(pid)
+          {server_id, pid, ref}
+        end)
+
+      servers =
+        Stoat.Server.fetch_many(server_ids)
+        |> Enum.map(fn %{"_id" => id} = server ->
+          count = Stoat.Server.fetch_approximate_user_count(id)
+          Map.put(server, "approximate_member_count", count)
+        end)
+
+      channel_ids = servers |> Enum.flat_map(& &1["channels"])
+      user_channels = Stoat.User.fetch_user_channels(state.user_id)
+
+      channels =
+        Mongo.find(:mongo_db, "channels", %{_id: %{"$in": channel_ids}}) |> Enum.to_list()
+
+      channels =
+        Stoat.Permissions.filter_inaccessible_channels(
+          channels ++ user_channels,
+          servers,
+          memberships,
+          state.user_id
         )
 
-        ref = Process.monitor(pid)
-        {server_id, pid, ref}
-      end)
+      user_ids =
+        Map.get(state.data, "relations", [])
+        |> Map.new(fn %{"_id" => id} = data -> {id, data} end)
 
-    servers =
-      Stoat.Server.fetch_many(server_ids)
-      |> Enum.map(fn %{"_id" => id} = server ->
-        count = Stoat.Server.fetch_approximate_user_count(id)
-        Map.put(server, "approximate_member_count", count)
-      end)
+      self_status = Map.get(user, "status", %{})
 
-    channel_ids = servers |> Enum.flat_map(& &1["channels"])
-    user_channels = Stoat.User.fetch_user_channels(state.user_id)
-    channels = Mongo.find(:mongo_db, "channels", %{_id: %{"$in": channel_ids}}) |> Enum.to_list()
+      ready_payload = %Stoat.State.Ready{}
 
-    channels =
-      Stoat.Permissions.filter_inaccessible_channels(
-        channels ++ user_channels,
-        servers,
-        memberships,
-        state.user_id
-      )
-
-    user_ids =
-      Map.get(state.data, "relations", [])
-      |> Map.new(fn %{"_id" => id} = data -> {id, data} end)
-
-    self_status = Map.get(user, "status", %{})
-
-    ready_payload = %Stoat.State.Ready{}
-
-    ready_payload =
-      if state.ready_fields.users do
-        %{
+      ready_payload =
+        if state.ready_fields.users do
+          %{
+            ready_payload
+            | users: [
+                build_ready_user(state.data, "User", true, self_status)
+                | build_ready_relations_from_state(user_ids, state)
+              ]
+          }
+        else
           ready_payload
-          | users: [
-              build_ready_user(state.data, "User", true, self_status)
-              | build_ready_relations_from_state(user_ids, state)
-            ]
-        }
-      else
-        ready_payload
-      end
+        end
 
-    ready_payload =
-      if state.ready_fields.servers do
-        %{ready_payload | servers: servers}
-      else
-        ready_payload
-      end
-
-    ready_payload =
-      if state.ready_fields.channels do
-        %{ready_payload | channels: channels}
-      else
-        ready_payload
-      end
-
-    ready_payload =
-      if state.ready_fields.members do
-        %{ready_payload | members: memberships}
-      else
-        ready_payload
-      end
-
-    ready_payload =
-      if state.ready_fields.emojis do
-        %{ready_payload | emojis: Stoat.Server.find_emojis_by_many(server_ids)}
-      else
-        ready_payload
-      end
-
-    ready_payload =
-      if !Enum.empty?(state.ready_fields.user_settings) do
-        %{
+      ready_payload =
+        if state.ready_fields.servers do
+          %{ready_payload | servers: servers}
+        else
           ready_payload
-          | user_settings:
-              Stoat.User.fetch_user_settings(state.user_id, state.ready_fields.user_settings)
-        }
-      else
-        ready_payload
-      end
+        end
 
-    ready_payload =
-      if state.ready_fields.channel_unreads do
-        %{ready_payload | channel_unreads: Stoat.User.fetch_unreads(state.user_id)}
-      else
-        ready_payload
-      end
-
-    ready_payload =
-      if state.ready_fields.policy_changes && state.type == :user do
-        last_acknowledge_time = Map.get(state.data, "last_acknowledged_policy_change", 0)
-
-        %{ready_payload | policy_changes: Stoat.User.fetch_policy_changes(last_acknowledge_time)}
-      else
-        ready_payload
-      end
-
-    ready_payload =
-      if state.ready_fields.voice_states do
-        %{
+      ready_payload =
+        if state.ready_fields.channels do
+          %{ready_payload | channels: channels}
+        else
           ready_payload
-          | voice_states: fetch_voice_states(filter_voice_enabled_channels(channels))
-        }
-      else
-        ready_payload
-      end
+        end
 
-    send(state.linked_socket, {:ready, ready_payload})
-    GenServer.cast(self(), {:presence_init_link, filter_dm_channels(channels)})
+      ready_payload =
+        if state.ready_fields.members do
+          %{ready_payload | members: memberships}
+        else
+          ready_payload
+        end
 
-    {:noreply,
-     %{
-       state
-       | ready: true,
-         linked_servers: server_pids,
-         servers: servers,
-         channels: channels,
-         memberships: memberships,
-         data: user
-     }}
+      ready_payload =
+        if state.ready_fields.emojis do
+          %{ready_payload | emojis: Stoat.Server.find_emojis_by_many(server_ids)}
+        else
+          ready_payload
+        end
+
+      ready_payload =
+        if !Enum.empty?(state.ready_fields.user_settings) do
+          %{
+            ready_payload
+            | user_settings:
+                Stoat.User.fetch_user_settings(state.user_id, state.ready_fields.user_settings)
+          }
+        else
+          ready_payload
+        end
+
+      ready_payload =
+        if state.ready_fields.channel_unreads do
+          %{ready_payload | channel_unreads: Stoat.User.fetch_unreads(state.user_id)}
+        else
+          ready_payload
+        end
+
+      ready_payload =
+        if state.ready_fields.policy_changes && state.type == :user do
+          last_acknowledge_time = Map.get(state.data, "last_acknowledged_policy_change", 0)
+
+          %{
+            ready_payload
+            | policy_changes: Stoat.User.fetch_policy_changes(last_acknowledge_time)
+          }
+        else
+          ready_payload
+        end
+
+      ready_payload =
+        if state.ready_fields.voice_states do
+          %{
+            ready_payload
+            | voice_states: fetch_voice_states(filter_voice_enabled_channels(channels))
+          }
+        else
+          ready_payload
+        end
+
+      send(state.linked_socket, {:ready, ready_payload})
+      GenServer.cast(self(), {:presence_init_link, filter_dm_channels(channels)})
+
+      {:noreply,
+       %{
+         state
+         | ready: true,
+           linked_servers: server_pids,
+           servers: servers,
+           channels: channels,
+           memberships: memberships,
+           data: user
+       }}
+    end
   end
 
   def handle_cast({:presence_init_link, dm_channels}, %__MODULE__{} = state) do
@@ -285,7 +298,12 @@ defmodule StoatGateway.Session do
 
     Process.monitor(presence_pid)
     status = Map.get(state.data, "status", %{})
-    GenServer.cast(presence_pid, {:session_link_async, state.session, state.type, self(), status})
+
+    GenServer.cast(
+      presence_pid,
+      {:session_link_async, state.session, state.type, self(), status}
+    )
+
     {:noreply, %{state | linked_presence: presence_pid}}
   end
 
