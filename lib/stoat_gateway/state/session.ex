@@ -439,12 +439,12 @@ defmodule StoatGateway.Session do
   end
 
   defp maybe_get_presence(user_id, _relation, %__MODULE__{} = _state) do
-    Logger.debug(
-      "session: build_ready_users -> maybe_get_presence: fetching presence for #{user_id}"
-    )
-
     case StoatGateway.Presence.lookup(user_id) do
       {:ok, pid} ->
+        Logger.debug(
+          "session: build_ready_users -> maybe_get_presence: fetching presence for #{user_id}"
+        )
+
         GenServer.call(pid, :fetch_presence_status)
 
       {:error, _} ->
