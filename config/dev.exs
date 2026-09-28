@@ -18,4 +18,11 @@ config :stoat_gateway,
     }
   }
 
-config :opentelemetry, traces_exporter: {:otel_exporter_stdout, []}
+config :opentelemetry,
+  resource: %{service: %{name: "stoat_gateway"}},
+  span_processor: :batch,
+  traces_exporter: :otlp
+
+config :opentelemetry_exporter,
+  otlp_protocol: :http_protobuf,
+  otlp_endpoint: "http://localhost:4318"

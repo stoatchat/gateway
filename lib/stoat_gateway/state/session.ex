@@ -58,17 +58,18 @@ defmodule StoatGateway.Session do
         socket: socket,
         data: %{"user_id" => id, "_id" => session} = _data,
         type: type,
-        ready_fields: ready_fields
+        ready_fields: ready_fields,
+        trace: trace
       }) do
     GenServer.start_link(
       __MODULE__,
-      %__MODULE__{
-        user_id: id,
-        linked_socket: socket,
-        session: session,
-        type: type,
-        ready_fields: ready_fields
-      }
+      {%__MODULE__{
+         user_id: id,
+         linked_socket: socket,
+         session: session,
+         type: type,
+         ready_fields: ready_fields
+       }, trace}
     )
   end
 
@@ -78,17 +79,18 @@ defmodule StoatGateway.Session do
           "_id" => id
         },
         type: type,
-        ready_fields: ready_fields
+        ready_fields: ready_fields,
+        trace: trace
       }) do
     GenServer.start_link(
       __MODULE__,
-      %__MODULE__{
-        user_id: id,
-        linked_socket: socket,
-        session: id,
-        type: type,
-        ready_fields: ready_fields
-      }
+      {%__MODULE__{
+         user_id: id,
+         linked_socket: socket,
+         session: id,
+         type: type,
+         ready_fields: ready_fields
+       }, trace}
     )
   end
 
@@ -103,17 +105,19 @@ defmodule StoatGateway.Session do
     end
   end
 
-  def init(state) do
+  def init({state, trace}) do
     :telemetry.execute([:gateway, :session, :init], %{}, %{type: state.type})
     Logger.debug("session: init self: #{inspect(self())} with state: #{inspect(state)}")
     Process.monitor(state.linked_socket)
     Registry.register(Stoat.Sessions, state.user_id, state.session)
     # let the socket know of the PID in case we have error'd and are a new Process
     send(state.linked_socket, {:session_ack, self()})
-    {:ok, state, {:continue, :ready}}
+    {:ok, state, {:continue, {:ready, trace}}}
   end
 
-  def handle_continue(:ready, state = %__MODULE__{}) do
+  def handle_continue({:ready, trace}, state = %__MODULE__{}) do
+    Tracer.set_current_span(trace)
+
     Tracer.with_span :handle_continue_ready do
       Tracer.set_attribute("session.id", state.session)
       Tracer.set_attribute("user.id", state.user_id)
@@ -274,37 +278,39 @@ defmodule StoatGateway.Session do
       "session=#{state.session} init presence link with channels #{inspect(dm_channels)}"
     )
 
-    Redix.command(:redix, ["SADD", "sessions:#{state.user_id}", state.session])
+    Tracer.with_span :presence_init_link do
+      Redix.command(:redix, ["SADD", "sessions:#{state.user_id}", state.session])
 
-    relationships = Map.get(state.data, "relations", [])
-    self_status = Map.get(state.data, "status", %{})
+      relationships = Map.get(state.data, "relations", [])
+      self_status = Map.get(state.data, "status", %{})
 
-    presence_pid =
-      case StoatGateway.Presence.lookup(state.user_id) do
-        {:ok, pid} ->
-          pid
+      presence_pid =
+        case StoatGateway.Presence.lookup(state.user_id) do
+          {:ok, pid} ->
+            pid
 
-        _ ->
-          {:ok, pid} =
-            StoatGateway.Presence.supervised_start(
-              state.user_id,
-              dm_channels,
-              relationships,
-              self_status
-            )
+          _ ->
+            {:ok, pid} =
+              StoatGateway.Presence.supervised_start(
+                state.user_id,
+                dm_channels,
+                relationships,
+                self_status
+              )
 
-          pid
-      end
+            pid
+        end
 
-    Process.monitor(presence_pid)
-    status = Map.get(state.data, "status", %{})
+      Process.monitor(presence_pid)
+      status = Map.get(state.data, "status", %{})
 
-    GenServer.cast(
-      presence_pid,
-      {:session_link_async, state.session, state.type, self(), status}
-    )
+      GenServer.cast(
+        presence_pid,
+        {:session_link_async, state.session, state.type, self(), status}
+      )
 
-    {:noreply, %{state | linked_presence: presence_pid}}
+      {:noreply, %{state | linked_presence: presence_pid}}
+    end
   end
 
   def handle_cast({:event_typing, event, channel_id}, state) do
@@ -422,6 +428,10 @@ defmodule StoatGateway.Session do
 
       {online, status} = maybe_get_presence(id, relation_status, state)
 
+      Tracer.add_event("session.maybe_get_presence:fetch_presence_status", %{
+        target_user_id: id
+      })
+
       build_ready_user(user, relation_status, online, status)
     end)
     |> Enum.reject(&is_nil/1)
@@ -460,6 +470,10 @@ defmodule StoatGateway.Session do
     Logger.debug(
       "session: build_ready_users -> maybe_get_presence: fetching presence for #{user_id}"
     )
+
+    Tracer.add_event("session.maybe_get_presence:fetch_presence_status.lookup_pid", %{
+      target_user_id: user_id
+    })
 
     case StoatGateway.Presence.lookup(user_id) do
       {:ok, pid} ->

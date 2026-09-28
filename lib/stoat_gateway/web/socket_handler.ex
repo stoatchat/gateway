@@ -1,4 +1,5 @@
 alias StoatGateway.Web.HeaderMap
+require OpenTelemetry.Tracer, as: Tracer
 
 defmodule StoatGateway.Web.ReadyFields do
   @type t :: %__MODULE__{
@@ -87,6 +88,7 @@ defmodule StoatGateway.Web.ReadyFields do
 end
 
 defmodule StoatGateway.Web.SocketHandler do
+  alias OpenTelemetry.Tracer
   alias StoatGateway.Web.ReadyFields
   require Logger
 
@@ -200,7 +202,7 @@ defmodule StoatGateway.Web.SocketHandler do
   @impl true
   def handle_info({:DOWN, _ref, :process, _pid, _}, state) do
     {:ok, state}
-    #{:stop, :shutdown, 1011, build_error("ServerError", state.format), state}
+    # {:stop, :shutdown, 1011, build_error("ServerError", state.format), state}
   end
 
   @impl true
@@ -238,22 +240,30 @@ defmodule StoatGateway.Web.SocketHandler do
   defp handle_auth(token, format, ready_fields) do
     with {type, data} <- StoatGateway.Auth.find_by_token(token) do
       # NOTE: replace this with lookup for SessionResume in the future
-      {:ok, session_pid} =
-        DynamicSupervisor.start_child(
-          Stoat.Sessions.Supervisor,
-          {StoatGateway.Session,
-           %{data: data, socket: self(), type: type, ready_fields: ready_fields}}
-        )
+      Tracer.with_span :session_login do
+        {:ok, session_pid} =
+          DynamicSupervisor.start_child(
+            Stoat.Sessions.Supervisor,
+            {StoatGateway.Session,
+             %{
+               data: data,
+               socket: self(),
+               type: type,
+               ready_fields: ready_fields,
+               trace: Tracer.current_span_ctx()
+             }}
+          )
 
-      Process.monitor(session_pid)
+        Process.monitor(session_pid)
 
-      {:push, build_event(:Authenticated, format),
-       %__MODULE__{
-         ready: true,
-         format: format,
-         linked_session: session_pid,
-         ready_fields: ready_fields
-       }}
+        {:push, build_event(:Authenticated, format),
+         %__MODULE__{
+           ready: true,
+           format: format,
+           linked_session: session_pid,
+           ready_fields: ready_fields
+         }}
+      end
     else
       _ ->
         {:push, build_error(:InvalidSession, "Invalid token provided", format),
