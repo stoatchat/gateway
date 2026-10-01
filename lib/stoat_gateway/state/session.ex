@@ -280,6 +280,7 @@ defmodule StoatGateway.Session do
 
     Tracer.with_span :presence_init_link do
       Redix.command(:redix, ["SADD", "sessions:#{state.user_id}", state.session])
+      Tracer.add_event(":presence_init_link.sessions_redis_SADD", %{})
 
       relationships = Map.get(state.data, "relations", [])
       self_status = Map.get(state.data, "status", %{})
@@ -287,6 +288,7 @@ defmodule StoatGateway.Session do
       presence_pid =
         case StoatGateway.Presence.lookup(state.user_id) do
           {:ok, pid} ->
+            Tracer.add_event(":presence_init_link.lookup_success", %{})
             pid
 
           _ ->
@@ -298,6 +300,7 @@ defmodule StoatGateway.Session do
                 self_status
               )
 
+            Tracer.add_event(":presence_init_link.supervised_start", %{})
             pid
         end
 
@@ -309,6 +312,7 @@ defmodule StoatGateway.Session do
         {:session_link_async, state.session, state.type, self(), status}
       )
 
+      Tracer.add_event(":presence_init_link.session_link_async", %{})
       {:noreply, %{state | linked_presence: presence_pid}}
     end
   end
