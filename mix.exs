@@ -7,6 +7,11 @@ defmodule StoatGateway.MixProject do
       version: "0.1.0",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
+      releases: [
+        stoat_gateway: [
+          applications: [opentelemetry: :temporary, opentelemetry_expoerter: :permanent]
+        ]
+      ],
       deps: deps()
     ]
   end
@@ -35,7 +40,9 @@ defmodule StoatGateway.MixProject do
       {:telemetry_poller, "~> 0.4"},
       {:peep, "~> 5.0"},
       {:needle_ulid, git: "https://github.com/bonfire-networks/needle_ulid", ref: "c48e90b"},
-      {:opentelemetry_api, "~> 1.5"}
+      {:opentelemetry, "~> 1.7"},
+      {:opentelemetry_api, "~> 1.5"},
+      {:opentelemetry_exporter, "~> 1.11"}
     ]
   end
 end

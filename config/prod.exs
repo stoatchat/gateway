@@ -11,3 +11,14 @@ config :stoat_gateway,
   ],
   redis: System.get_env("REDIS_URI", "redis://localhost:6379"),
   revolt: %{}
+
+config :opentelemetry,
+  resource: %{service: %{name: "stoat_gateway"}},
+  span_processor: :batch,
+  traces_exporter: :otlp,
+  # 100% of traces
+  sampler: {:trace_id_ratio_based, 1}
+
+config :opentelemetry_exporter,
+  otlp_protocol: :http_protobuf,
+  otlp_endpoint: System.get_env("OTEL_ENDPOINT", "http://localhost:10428/insert/opentelemetry")

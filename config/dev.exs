@@ -13,7 +13,17 @@ config :stoat_gateway,
   revolt: %{
     "api" => %{
       "users" => %{
-        "early_adopter_cutoff" => 1784761200
-      }  
+        "early_adopter_cutoff" => 1_784_761_200
+      }
     }
   }
+
+config :opentelemetry,
+  resource: %{service: %{name: "stoat_gateway"}},
+  span_processor: :batch,
+  traces_exporter: :otlp,
+  sampler: {:trace_id_ratio_based, 1}
+
+config :opentelemetry_exporter,
+  otlp_protocol: :http_protobuf,
+  otlp_endpoint: "http://localhost:10428/insert/opentelemetry"

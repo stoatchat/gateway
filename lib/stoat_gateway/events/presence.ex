@@ -4,6 +4,8 @@ defmodule StoatGateway.Presence do
   Designed to be a "channel" agnostic routing layer for events which do not belong to a Server
   Essentially the level above a Session but called presence as it mostly handles this
   """
+  require OpenTelemetry.Tracer
+  alias OpenTelemetry.Tracer
   use GenServer, restart: :transient
   require Logger
   @maximum_previous_presences 25
@@ -47,12 +49,16 @@ defmodule StoatGateway.Presence do
     {:ok, state, {:continue, :ensure_init}}
   end
 
-  def handle_continue(:ensure_init, state) do
-    ensure_gdm_subscriptions(state.dm_channels)
-    ensure_friend_subscriptions(state.relationships)
-    ensure_online_set_subscription(state)
-    subscribers_dispatch(build_user_update(true, state.current_status, state), state)
-    {:noreply, state}
+  def handle_continue(:ensure_init, state = %__MODULE__{}) do
+    Tracer.with_span :presence_ensure_init do
+      Tracer.set_attribute(:user_id, state.user_id)
+      ensure_gdm_subscriptions(state.dm_channels)
+      ensure_friend_subscriptions(state.relationships)
+      ensure_online_set_subscription(state)
+      subscribers_dispatch(build_user_update(true, state.current_status, state), state)
+      Tracer.add_event("presence.initial_online_dispatch", %{})
+      {:noreply, state}
+    end
   end
 
   def handle_cast({:session_link_async, session_id, type, pid, status}, state) do
@@ -224,19 +230,26 @@ defmodule StoatGateway.Presence do
     Enum.each(Map.keys(channels), fn channel_id ->
       :pg.join(:gdm_channels, channel_id, self())
     end)
+
+    Tracer.add_event("presence.ensure_gdm_subscriptions", %{})
   end
 
   defp ensure_friend_subscriptions(relationships) do
     Enum.each(relationships, fn {friend_id, %{"status" => status}} ->
       case status do
-        "Friend" -> :pg.join(:presence, friend_id, self())
-        _ -> nil
+        "Friend" ->
+          :pg.join(:presence, friend_id, self())
+          Tracer.add_event("presence.ensure_friend_presence_sub", %{friend_id: friend_id})
+
+        _ ->
+          nil
       end
     end)
   end
 
   defp ensure_online_set_subscription(%__MODULE__{} = state) do
     Redix.command(:redix, ["SADD", "online", state.user_id])
+    Tracer.add_event("presence.ensure_online_redis", %{})
   end
 
   defp session_dispatch(payload, state) do
