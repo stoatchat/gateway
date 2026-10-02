@@ -9,7 +9,7 @@ defmodule StoatGateway.MixProject do
       start_permanent: Mix.env() == :prod,
       releases: [
         stoat_gateway: [
-          applications: [opentelemetry: :temporary, opentelemetry_expoerter: :permanent]
+          applications: [opentelemetry: :temporary, opentelemetry_exporter: :permanent]
         ]
       ],
       deps: deps()
