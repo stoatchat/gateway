@@ -135,13 +135,16 @@ defmodule StoatGateway.Server do
 
     updated =
       Enum.reduce(clear, data, fn key, server ->
-        Map.delete(server, case key do
-          :Description -> "description"
-          :Categories -> "categories"
-          :SystemMessages -> "system_messages"
-          :Icon -> "icon"
-          :Banner -> "banner"
-        end)
+        Map.delete(
+          server,
+          case key do
+            :Description -> "description"
+            :Categories -> "categories"
+            :SystemMessages -> "system_messages"
+            :Icon -> "icon"
+            :Banner -> "banner"
+          end
+        )
       end)
 
     updated_state = %{state | data: updated}

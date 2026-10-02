@@ -1,8 +1,7 @@
 defmodule StoatGateway.Web.Router do
   use Plug.Router
 
-  plug(Plug.Logger)
-  plug Peep.Plug, path: "/metrics", peep_worker: Stoat.Metrics.Peep
+  plug(Peep.Plug, path: "/metrics", peep_worker: Stoat.Metrics.Peep)
   plug(:match)
   plug(:dispatch)
 
