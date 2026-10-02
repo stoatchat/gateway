@@ -27,7 +27,7 @@ defmodule StoatGateway.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:bandit, "~> 1.10"},
+      {:bandit, "~> 1.12"},
       {:websock_adapter, "~> 0.5.9"},
       {:broadway_rabbitmq, "~> 0.8.2"},
       {:jason, "~> 1.4"},
