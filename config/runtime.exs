@@ -30,9 +30,7 @@ if config_env() == :prod do
   config :opentelemetry,
     resource: %{service: %{name: "stoat_gateway"}},
     span_processor: :batch,
-    traces_exporter: :otlp,
-    # 100% of traces
-    sampler: {:trace_id_ratio_based, 1}
+    traces_exporter: :otlp
 
   config :opentelemetry_exporter,
     otlp_protocol: :http_protobuf,
