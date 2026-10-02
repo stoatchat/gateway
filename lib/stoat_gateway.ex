@@ -4,6 +4,7 @@ defmodule StoatGateway do
   @impl true
   def start(_type, _args) do
     :ets.new(:channel_server_refs, [:named_table, :set, :public])
+    :ets.new(:presences, [:named_table, :set, :public])
 
     children = [
       StoatGateway.Telemetry.Supervisor,
