@@ -180,8 +180,6 @@ defmodule StoatGateway.Session do
         |> Enum.concat(dm_recipients)
         |> Enum.dedup()
 
-      IO.inspect(user_ids)
-
       self_status = Map.get(user, "status", %{})
 
       ready_payload = %Stoat.State.Ready{}
