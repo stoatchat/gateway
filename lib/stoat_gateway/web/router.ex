@@ -1,4 +1,6 @@
 defmodule StoatGateway.Web.Router do
+  require OpenTelemetry.Tracer
+  alias OpenTelemetry.Tracer
   use Plug.Router
 
   plug(Peep.Plug, path: "/metrics", peep_worker: Stoat.Metrics.Peep)
@@ -12,9 +14,18 @@ defmodule StoatGateway.Web.Router do
       ["websocket"] ->
         headers = StoatGateway.Web.HeaderMap.from_conn(conn)
 
-        conn
-        |> WebSockAdapter.upgrade(StoatGateway.Web.SocketHandler, headers, timeout: 35_000)
-        |> halt()
+        Tracer.with_span :websocket_init do
+          trace_id = Tracer.current_span_ctx() |> OpenTelemetry.Span.hex_trace_id()
+
+          conn
+          |> put_resp_header("x-gateway-trace", trace_id)
+          |> WebSockAdapter.upgrade(
+            StoatGateway.Web.SocketHandler,
+            {headers, Tracer.current_span_ctx()},
+            timeout: 35_000
+          )
+          |> halt()
+        end
 
       _ ->
         conn

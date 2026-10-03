@@ -17,7 +17,6 @@ defmodule StoatGateway.Session do
   alias StoatGateway.Web.ReadyFields
   use GenServer, restart: :transient
   require OpenTelemetry.Tracer, as: Tracer
-  require OpenTelemetry.Span
   require Logger
   # Arbitrary 20s timeout to resume
   @socket_disconnect_timeout 5_000

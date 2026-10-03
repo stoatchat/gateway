@@ -94,17 +94,22 @@ defmodule StoatGateway.Web.SocketHandler do
 
   @behaviour WebSock
 
-  defstruct ready: false, format: :json, linked_session: nil, ready_fields: %ReadyFields{}
+  defstruct ready: false,
+            format: :json,
+            linked_session: nil,
+            ready_fields: %ReadyFields{},
+            span_ctx: nil
 
   @type t :: %__MODULE__{
           ready: boolean(),
           format: String.t(),
           linked_session: pid(),
-          ready_fields: ReadyFields.t()
+          ready_fields: ReadyFields.t(),
+          span_ctx: OpenTelemetry.span_ctx()
         }
 
   @impl true
-  def init(query_params) do
+  def init({query_params, span_ctx}) do
     format =
       case HeaderMap.get_singular(query_params, "format") do
         "etf" -> :etf
@@ -119,10 +124,11 @@ defmodule StoatGateway.Web.SocketHandler do
       end
 
     with {:ok, token} <- HeaderMap.fetch_singular(query_params, "token") do
-      handle_auth(token, format, ready_fields)
+      handle_auth(token, format, ready_fields, span_ctx)
     else
       _ ->
-        {:ok, %__MODULE__{ready: false, format: format, ready_fields: ready_fields}}
+        {:ok,
+         %__MODULE__{ready: false, format: format, ready_fields: ready_fields, span_ctx: span_ctx}}
     end
   end
 
@@ -149,7 +155,7 @@ defmodule StoatGateway.Web.SocketHandler do
         %{"token" => token} = _payload,
         %{ready: false} = state
       ) do
-    handle_auth(token, state.format, state.ready_fields)
+    handle_auth(token, state.format, state.ready_fields, state.span_ctx)
   end
 
   def handle_payload("ping", %{"data" => data} = _payload, %{ready: true} = state) do
@@ -237,9 +243,11 @@ defmodule StoatGateway.Web.SocketHandler do
     {:ok, state}
   end
 
-  defp handle_auth(token, format, ready_fields) do
+  defp handle_auth(token, format, ready_fields, span_ctx) do
     with {type, data} <- StoatGateway.Auth.find_by_token(token) do
       # NOTE: replace this with lookup for SessionResume in the future
+      Tracer.set_current_span(span_ctx)
+
       Tracer.with_span :session_login do
         {:ok, session_pid} =
           DynamicSupervisor.start_child(
