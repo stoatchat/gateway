@@ -115,7 +115,7 @@ defmodule StoatGateway.Session do
     {:ok, state, {:continue, {:ready, trace}}}
   end
 
-  def handle_continue({:ready, trace}, state = %__MODULE__{}) do
+  def handle_continue({:ready, trace}, %__MODULE__{} = state) do
     Tracer.set_current_span(trace)
 
     Tracer.with_span :handle_continue_ready do
@@ -381,10 +381,13 @@ defmodule StoatGateway.Session do
     {:noreply, %{state | linked_servers: [{id, pid, ref} | state.linked_servers]}}
   end
 
-  def handle_info({:presence_roundabout, payload}, %__MODULE__{} = state) do
+  def handle_info({:presence_roundabout, payload}, %__MODULE__{} = state)
+      when is_pid(state.linked_presence) do
     send(state.linked_presence, {:presence_update, payload})
     {:noreply, state}
   end
+
+  def handle_info({:presence_roundabout, _}, state), do: {:noreply, state}
 
   def handle_info({:DOWN, _ref, :process, pid, _}, %__MODULE__{} = state)
       when pid == state.linked_socket do
@@ -434,7 +437,7 @@ defmodule StoatGateway.Session do
   end
 
   @spec build_ready_users_from_state(list(), __MODULE__.t()) :: list(map())
-  defp build_ready_users_from_state(user_ids, state = %__MODULE__{}) do
+  defp build_ready_users_from_state(user_ids, %__MODULE__{} = state) do
     users = Stoat.User.fetch_by_ids(user_ids)
 
     relationships =

@@ -49,7 +49,7 @@ defmodule StoatGateway.Presence do
     {:ok, state, {:continue, :ensure_init}}
   end
 
-  def handle_continue(:ensure_init, state = %__MODULE__{}) do
+  def handle_continue(:ensure_init, %__MODULE__{} = state) do
     Tracer.with_span :presence_ensure_init do
       Tracer.set_attribute(:user_id, state.user_id)
       ensure_gdm_subscriptions(state.dm_channels)
@@ -262,7 +262,7 @@ defmodule StoatGateway.Presence do
     Enum.each(subscribers, &send(&1, {:presence_update, payload}))
   end
 
-  def terminate(_, state = %__MODULE__{}) do
+  def terminate(_, %__MODULE__{} = state) do
     Redix.command(:redix, ["SREM", "online", state.user_id])
     :ets.delete(:presences, state.user_id)
     subscribers_dispatch(build_user_update(false, state), state)
