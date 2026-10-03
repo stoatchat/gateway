@@ -168,9 +168,19 @@ defmodule StoatGateway.Session do
           state.user_id
         )
 
+      dm_channels = filter_dm_channels(channels)
+
+      dm_recipients =
+        Enum.flat_map(dm_channels, fn channel -> Map.get(channel, "recipients", []) end)
+        |> Enum.filter(fn user_id -> user_id != state.user_id end)
+
       user_ids =
         Map.get(state.data, "relations", [])
-        |> Map.new(fn %{"_id" => id} = data -> {id, data} end)
+        |> Enum.map(fn %{"_id" => id} -> id end)
+        |> Enum.concat(dm_recipients)
+        |> Enum.dedup()
+
+      IO.inspect(user_ids)
 
       self_status = Map.get(user, "status", %{})
 
@@ -182,7 +192,7 @@ defmodule StoatGateway.Session do
             ready_payload
             | users: [
                 build_ready_user(state.data, "User", true, self_status)
-                | build_ready_relations_from_state(user_ids, state)
+                | build_ready_users_from_state(user_ids, state)
               ]
           }
         else
@@ -258,7 +268,7 @@ defmodule StoatGateway.Session do
         end
 
       send(state.linked_socket, {:ready, ready_payload})
-      GenServer.cast(self(), {:presence_init_link, filter_dm_channels(channels)})
+      GenServer.cast(self(), {:presence_init_link, dm_channels})
 
       {:noreply,
        %{
@@ -423,13 +433,16 @@ defmodule StoatGateway.Session do
     end
   end
 
-  @spec build_ready_relations_from_state(map(), __MODULE__.t()) :: list(map())
-  defp build_ready_relations_from_state(relations, state) do
-    users = Stoat.User.fetch_by_ids(Map.keys(relations))
+  @spec build_ready_users_from_state(list(), __MODULE__.t()) :: list(map())
+  defp build_ready_users_from_state(user_ids, state = %__MODULE__{}) do
+    users = Stoat.User.fetch_by_ids(user_ids)
 
-    Enum.map(relations, fn {id, %{"status" => relation_status}} ->
-      user = Map.get(users, id)
+    relationships =
+      Map.get(state.data, "relations", [])
+      |> Map.new(fn %{"_id" => id, "status" => status} -> {id, status} end)
 
+    Enum.map(users, fn {id, user} ->
+      relation_status = Map.get(relationships, id, nil)
       {online, status} = maybe_get_presence(id, relation_status, state)
 
       Tracer.add_event("session.maybe_get_presence:fetch_presence_status", %{
