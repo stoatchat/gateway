@@ -8,9 +8,9 @@ defmodule StoatGateway.Events.Consumer do
         module:
           {BroadwayRabbitMQ.Producer,
            connection: Application.get_env(:stoat_gateway, :rabbit),
-           queue: "internal.event",
+           queue: "",
            metadata: [:headers],
-           declare: [{:durable, true}],
+           declare: [durable: true, exclusive: true, auto_delete: true],
            bindings: [
              {"revolt.default", [{:routing_key, "internal.event"}]}
            ],
