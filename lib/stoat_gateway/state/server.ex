@@ -30,7 +30,7 @@ defmodule StoatGateway.Server do
     end
   end
 
-  def init(state) do
+  def init(%__MODULE__{} = state) do
     channels =
       Stoat.Server.fetch_channels(state.id)
       |> Map.new(fn %{"_id" => id} = channel -> {id, channel} end)
@@ -399,7 +399,7 @@ defmodule StoatGateway.Server do
     %{"_id" => %{"user" => session.user_id}, "roles" => session.roles}
   end
 
-  defp build_channel_tuples(state) do
+  defp build_channel_tuples(%__MODULE__{} = state) do
     channels = Map.get(state.data, "channels")
 
     Enum.map(channels, fn id ->

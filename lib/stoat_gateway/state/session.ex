@@ -153,6 +153,8 @@ defmodule StoatGateway.Session do
           Map.put(server, "approximate_member_count", count)
         end)
 
+      Tracer.add_event("fetch_servers_feat_approx_count", %{})
+
       channel_ids = servers |> Enum.flat_map(& &1["channels"])
       user_channels = Stoat.User.fetch_user_channels(state.user_id)
 
@@ -172,6 +174,8 @@ defmodule StoatGateway.Session do
       dm_recipients =
         Enum.flat_map(dm_channels, fn channel -> Map.get(channel, "recipients", []) end)
         |> Enum.filter(fn user_id -> user_id != state.user_id end)
+
+      Tracer.add_event("channels_filtering", %{})
 
       user_ids =
         Map.get(state.data, "relations", [])

@@ -284,8 +284,8 @@ defmodule StoatGateway.Web.SocketHandler do
     encode_frame(%{type: event}, format)
   end
 
-  @spec _build_event(binary(), map(), atom()) :: {:text | :binary, binary()}
-  defp _build_event(event, payload, format) do
+  @spec build_event(binary(), map(), atom()) :: {:text | :binary, binary()}
+  defp build_event(event, payload, format) do
     encode_frame(%{type: event, data: payload}, format)
   end
 
