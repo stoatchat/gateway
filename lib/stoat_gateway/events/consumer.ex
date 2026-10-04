@@ -165,9 +165,7 @@ defmodule StoatGateway.Events.Consumer do
 
   def handle_event("Bees", data), do: handle_presence_event(:Bees, data)
 
-  def handle_event(event, data) do
-    Logger.info("Unhandled event=#{event} data=#{inspect(data)}")
-  end
+  def handle_event(_, _), do: nil
 
   def parse_channel_id(%{"channel" => channel_id}), do: channel_id
   def parse_channel_id(%{"channel_id" => channel_id}), do: channel_id
