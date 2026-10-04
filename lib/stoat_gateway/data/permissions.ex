@@ -127,27 +127,12 @@ defmodule Stoat.Permissions do
         calculated = permissions_for_member(member, server)
         default_permissisons = Map.get(channel, "default_permissions", default_permissions_map())
         calculated = apply_channel_overwrites(calculated, default_permissisons)
-
-        if channel_id == "01GYW3SW1WJQEXTFKTG9FKB253" do
-          Logger.debug(
-            "permissions_for_server_channel: team channel- pre role overrides: #{calculated} member:#{inspect(member)} channel:#{inspect(channel)}"
-          )
-        end
-
         role_permissions = Map.get(channel, "role_permissions", %{})
 
         Enum.reduce(Map.get(member, "roles", []), calculated, fn role_id, acc ->
           role = Map.get(role_permissions, role_id, default_permissions_map())
 
-          value = Bitwise.bor(acc, calculate_permissions(role))
-
-          if channel_id == "01GYW3SW1WJQEXTFKTG9FKB253" do
-            Logger.debug(
-              "permissions_for_server_channel: target role: #{role_id} reduce value: #{value}:#{inspect(role)}"
-            )
-          end
-
-          value
+          Bitwise.bor(acc, calculate_permissions(role))
         end)
     end
   end
