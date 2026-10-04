@@ -35,15 +35,21 @@ defmodule StoatGateway.Server do
       Stoat.Server.fetch_channels(state.id)
       |> Map.new(fn %{"_id" => id} = channel -> {id, channel} end)
 
-    server = Stoat.Server.fetch_by_id(state.id)
-    {:ok, %{state | data: server, channels: channels}, {:continue, :ensure_init_state}}
+    case Stoat.Server.fetch_by_id(state.id) do
+      %{"_id" => _} = server ->
+        {:ok, %{state | data: server, channels: channels}, {:continue, :ensure_init_state}}
+
+      nil ->
+        Logger.warning("server: terminating server init #{inspect(state.id)} due to nil data")
+        {:stop, :not_found}
+    end
   end
 
   def dispatch(pid, event, data) do
     GenServer.cast(pid, {:dispatch, event, data})
   end
 
-  def handle_continue(:ensure_init_state, state) do
+  def handle_continue(:ensure_init_state, %__MODULE__{} = state) do
     # Hack until we can get server id in each server channel related event
     channel_refs = build_channel_tuples(state)
     :ets.insert(:channel_server_refs, channel_refs)
@@ -93,7 +99,6 @@ defmodule StoatGateway.Server do
       {:dispatch, event, %{type: Atom.to_string(event), id: channel_id, user: user_id}}
     )
 
-    Logger.debug("server:#{inspect(self())} dispatching typing by #{user_id} to #{channel_id}")
     {:noreply, state}
   end
 
