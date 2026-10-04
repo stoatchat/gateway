@@ -272,25 +272,27 @@ defmodule StoatGateway.Session do
       ) do
     Logger.debug("session<#{inspect(self())}>: continue link servers")
 
-    server_pids =
-      Enum.map(servers, fn {server_id, _} ->
-        {:ok, pid} = StoatGateway.Server.lookup_or_start(server_id)
-        # v2: we'll reduce DB calls and initially send server_ids as unavailable
-        # as servers are started the membership process will cause ServerAvailable events to get fired
-        member = Map.get(memberships, server_id)
+    Tracer.with_span :ensure_link_servers do
+      server_pids =
+        Enum.map(servers, fn {server_id, _} ->
+          {:ok, pid} = StoatGateway.Server.lookup_or_start(server_id)
+          # v2: we'll reduce DB calls and initially send server_ids as unavailable
+          # as servers are started the membership process will cause ServerAvailable events to get fired
+          member = Map.get(memberships, server_id)
 
-        GenServer.cast(
-          pid,
-          {:session_link_async, state.session, state.type, state.user_id, self(), member}
-        )
+          GenServer.cast(
+            pid,
+            {:session_link_async, state.session, state.type, state.user_id, self(), member}
+          )
 
-        Tracer.add_event("server_link.session_link_async", %{server_id: server_id})
+          Tracer.add_event("server_link.session_link_async", %{server_id: server_id})
 
-        ref = Process.monitor(pid)
-        {server_id, pid, ref}
-      end)
+          ref = Process.monitor(pid)
+          {server_id, pid, ref}
+        end)
 
-    {:noreply, %{state | linked_servers: server_pids}}
+      {:noreply, %{state | linked_servers: server_pids}}
+    end
   end
 
   def handle_cast({:presence_init_link, dm_channels}, %__MODULE__{} = state) do

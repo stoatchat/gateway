@@ -1,6 +1,5 @@
 defmodule StoatGateway.Events.Consumer do
   use Broadway
-  require Logger
 
   def start_link(_) do
     Broadway.start_link(__MODULE__,
