@@ -62,19 +62,16 @@ defmodule Stoat.Permissions do
   require Logger
 
   # Essentially an impl of https://github.com/stoatchat/for-android/blob/dev/app/src/main/java/chat/stoat/api/internals/Roles.kt#L75
-  def filter_inaccessible_channels(channels, servers, members, user_id) do
+  def filter_inaccessible_channels(channels, servers, memberships, user_id) do
     Enum.filter(channels, fn channel ->
       case Map.get(channel, "server") do
         nil ->
           permissions_for_channel(channel, user_id)
 
         server_id ->
-          server = Enum.find(servers, fn %{"_id" => id} -> id == server_id end)
+          server = Map.get(servers, server_id)
 
-          member =
-            Enum.find(members, fn %{"_id" => %{"server" => id}} ->
-              id == server_id
-            end)
+          member = Map.get(memberships, server_id)
 
           permissions_for_channel(channel, member, server)
       end

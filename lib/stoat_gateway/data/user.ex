@@ -31,12 +31,6 @@ defmodule Stoat.User do
     |> Enum.to_list()
   end
 
-  def server_ids_from_memberships(memberships) when is_list(memberships) do
-    Enum.map(memberships, fn member ->
-      member["_id"]["server"]
-    end)
-  end
-
   def fetch_user_channels(user_id) do
     Mongo.find(:mongo_db, "channels", %{
       "$or": [

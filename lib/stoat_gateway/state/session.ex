@@ -30,9 +30,9 @@ defmodule StoatGateway.Session do
             linked_presence: nil,
             type: :user,
             forwarding: true,
-            servers: [],
+            servers: %{},
             channels: [],
-            memberships: [],
+            memberships: %{},
             users: [],
             linked_servers: []
 
@@ -46,9 +46,9 @@ defmodule StoatGateway.Session do
           linked_presence: pid(),
           type: atom(),
           forwarding: boolean(),
-          servers: list(),
+          servers: map(),
           channels: list(),
-          memberships: list(),
+          memberships: map(),
           users: list(),
           linked_servers: list()
         }
@@ -105,57 +105,40 @@ defmodule StoatGateway.Session do
   end
 
   def init({state, trace}) do
+    Tracer.set_current_span(trace)
     :telemetry.execute([:gateway, :session, :init], %{}, %{type: state.type})
     Logger.debug("session: init self: #{inspect(self())} with state: #{inspect(state)}")
     Process.monitor(state.linked_socket)
     Registry.register(Stoat.Sessions, state.user_id, state.session)
     # let the socket know of the PID in case we have error'd and are a new Process
     send(state.linked_socket, {:session_ack, self()})
-    {:ok, state, {:continue, {:ready, trace}}}
+    {:ok, state, {:continue, :ready}}
   end
 
-  def handle_continue({:ready, trace}, %__MODULE__{} = state) do
-    Tracer.set_current_span(trace)
-
+  def handle_continue(:ready, %__MODULE__{} = state) do
     Tracer.with_span :handle_continue_ready do
       Tracer.set_attribute("session.id", state.session)
       Tracer.set_attribute("user.id", state.user_id)
       user = Stoat.User.fetch_by_id(state.user_id)
       state = %{state | data: user}
-      memberships = Stoat.User.fetch_server_memberships(state.user_id)
-      server_ids = Stoat.User.server_ids_from_memberships(memberships)
 
-      server_pids =
-        Enum.map(server_ids, fn server_id ->
-          {:ok, pid} = StoatGateway.Server.lookup_or_start(server_id)
-          # v2: we'll reduce DB calls and initially send server_ids as unavailable
-          # as servers are started the membership process will cause ServerAvailable events to get fired
-          member =
-            Enum.find(memberships, fn %{"_id" => %{"server" => sid}} ->
-              sid == server_id
-            end)
-
-          GenServer.cast(
-            pid,
-            {:session_link_async, state.session, state.type, state.user_id, self(), member}
-          )
-
-          Tracer.add_event("server.session_link_async", %{server_id: server_id})
-
-          ref = Process.monitor(pid)
-          {server_id, pid, ref}
+      memberships =
+        Stoat.User.fetch_server_memberships(state.user_id)
+        |> Map.new(fn %{"_id" => %{"server" => server_id}} = membership ->
+          {server_id, membership}
         end)
 
       servers =
-        Stoat.Server.fetch_many(server_ids)
-        |> Enum.map(fn %{"_id" => id} = server ->
+        Map.keys(memberships)
+        |> Stoat.Server.fetch_many()
+        |> Map.new(fn %{"_id" => id} = server ->
           count = Stoat.Server.fetch_approximate_user_count(id)
-          Map.put(server, "approximate_member_count", count)
+          {id, Map.put(server, "approximate_member_count", count)}
         end)
 
       Tracer.add_event("fetch_servers_feat_approx_count", %{})
 
-      channel_ids = servers |> Enum.flat_map(& &1["channels"])
+      channel_ids = Map.values(servers) |> Enum.flat_map(& &1["channels"])
       user_channels = Stoat.User.fetch_user_channels(state.user_id)
 
       channels =
@@ -202,7 +185,7 @@ defmodule StoatGateway.Session do
 
       ready_payload =
         if state.ready_fields.servers do
-          %{ready_payload | servers: servers}
+          %{ready_payload | servers: Map.values(servers)}
         else
           ready_payload
         end
@@ -216,14 +199,14 @@ defmodule StoatGateway.Session do
 
       ready_payload =
         if state.ready_fields.members do
-          %{ready_payload | members: memberships}
+          %{ready_payload | members: Map.values(memberships)}
         else
           ready_payload
         end
 
       ready_payload =
         if state.ready_fields.emojis do
-          %{ready_payload | emojis: Stoat.Server.find_emojis_by_many(server_ids)}
+          %{ready_payload | emojis: Stoat.Server.find_emojis_by_many(Map.keys(memberships))}
         else
           ready_payload
         end
@@ -275,13 +258,39 @@ defmodule StoatGateway.Session do
        %{
          state
          | ready: true,
-           linked_servers: server_pids,
            servers: servers,
            channels: channels,
            memberships: memberships,
            data: user
-       }}
+       }, {:continue, :ensure_link_servers}}
     end
+  end
+
+  def handle_continue(
+        :ensure_link_servers,
+        %__MODULE__{servers: servers, memberships: memberships} = state
+      ) do
+    Logger.debug("session<#{inspect(self())}>: continue link servers")
+
+    server_pids =
+      Enum.map(servers, fn {server_id, _} ->
+        {:ok, pid} = StoatGateway.Server.lookup_or_start(server_id)
+        # v2: we'll reduce DB calls and initially send server_ids as unavailable
+        # as servers are started the membership process will cause ServerAvailable events to get fired
+        member = Map.get(memberships, server_id)
+
+        GenServer.cast(
+          pid,
+          {:session_link_async, state.session, state.type, state.user_id, self(), member}
+        )
+
+        Tracer.add_event("server_link.session_link_async", %{server_id: server_id})
+
+        ref = Process.monitor(pid)
+        {server_id, pid, ref}
+      end)
+
+    {:noreply, %{state | linked_servers: server_pids}}
   end
 
   def handle_cast({:presence_init_link, dm_channels}, %__MODULE__{} = state) do
@@ -579,7 +588,8 @@ defmodule StoatGateway.Session do
   end
 
   # Clean-up important state
-  def terminate(_reason, state) do
+  def terminate(reason, state) do
+    Tracer.add_event("session.terminate", %{reason: reason})
     Registry.unregister_match(Stoat.Sessions, state.user_id, state.session)
     Redix.command(:redix, ["SREM", "sessions:#{state.user_id}", state.session])
   end
