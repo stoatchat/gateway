@@ -8,7 +8,7 @@ defmodule StoatGateway.Events.Consumer do
         module:
           {BroadwayRabbitMQ.Producer,
            connection: Application.get_env(:stoat_gateway, :rabbit),
-           queue: "",
+           queue: "gateway.events.#{:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)}",
            metadata: [:headers],
            declare: [durable: true, exclusive: true, auto_delete: true],
            bindings: [
