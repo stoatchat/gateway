@@ -217,29 +217,13 @@ defmodule StoatGateway.Web.SocketHandler do
   end
 
   @impl true
-  def terminate(:timeout, state) do
-    {:ok, state}
-  end
-
-  @impl true
-  def terminate(:remote, state) do
-    {:ok, state}
-  end
-
-  @impl true
   def terminate(:normal, state) do
-    # Some sort of clean-up here
     {:ok, state}
   end
 
   @impl true
-  def terminate(:shutdown, state) do
-    {:ok, state}
-  end
-
-  @impl true
-  def terminate({:error, reason}, state) do
-    Logger.warning("Closing socket with error: #{inspect(reason)}")
+  def terminate(reason, state) do
+    Logger.warning("Closing socket with reason: #{inspect(reason)}")
     {:ok, state}
   end
 
