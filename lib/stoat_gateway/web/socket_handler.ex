@@ -158,8 +158,12 @@ defmodule StoatGateway.Web.SocketHandler do
     handle_auth(token, state.format, state.ready_fields, state.span_ctx)
   end
 
-  def handle_payload("ping", %{"data" => data} = _payload, %{ready: true} = state) do
+  def handle_payload("ping", %{"data" => data}, state) do
     {:push, encode_frame(%{type: "Pong", data: data}, state.format), state}
+  end
+
+  def handle_payload("ping", _payload, state) do
+    {:push, encode_frame(%{type: "Pong"}, state.format), state}
   end
 
   def handle_payload(
