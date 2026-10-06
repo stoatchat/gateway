@@ -55,8 +55,9 @@ defmodule StoatGateway.Presence do
       ensure_gdm_subscriptions(state.dm_channels)
       ensure_friend_subscriptions(state.relationships)
       ensure_online_set_subscription(state)
-      :ets.insert(:presences, {state.user_id, {true, state.current_status}})
-      subscribers_dispatch(build_user_update(true, state.current_status, state), state)
+      online = online_from_status(state.current_status)
+      :ets.insert(:presences, {state.user_id, {online, state.current_status}})
+      subscribers_dispatch(build_user_update(online, state.current_status, state), state)
       Tracer.add_event("presence.initial_online_dispatch", %{})
       {:noreply, state}
     end
@@ -300,6 +301,10 @@ defmodule StoatGateway.Presence do
        "clear" => []
      }}
   end
+
+  def online_from_status(%{"presence" => "Invisible"}), do: false
+  def online_from_status(%{"presence" => _}), do: true
+  def online_from_status(_status), do: true
 
   def code_change(_old_vsn, state, _extra), do: {:ok, state}
 end

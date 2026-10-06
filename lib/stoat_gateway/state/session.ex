@@ -175,7 +175,12 @@ defmodule StoatGateway.Session do
           %{
             ready_payload
             | users: [
-                build_ready_user(state.data, "User", true, self_status)
+                build_ready_user(
+                  state.data,
+                  "User",
+                  StoatGateway.Presence.online_from_status(self_status),
+                  self_status
+                )
                 | build_ready_users_from_state(user_ids, state)
               ]
           }
