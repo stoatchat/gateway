@@ -56,7 +56,7 @@ defmodule StoatGateway.Presence do
       ensure_gdm_subscriptions(state.dm_channels)
       ensure_friend_subscriptions(state.relationships)
       online = online_from_status(state.current_status)
-      :ets.insert(:presences, {state.user_id, {online, state.current_status}})
+      push_new_status(state.current_status, state)
       subscribers_dispatch(build_user_update(online, state.current_status, state), state)
       Tracer.add_event("presence.initial_online_dispatch", %{})
       {:noreply, state}
@@ -219,14 +219,21 @@ defmodule StoatGateway.Presence do
 
   # Update self-status for presence fetches in ready payload
   defp maybe_update_state(:UserUpdate, %{"data" => %{"status" => new_status}}, state) do
+    push_new_status(new_status, state)
     %{state | current_status: new_status}
   end
 
   defp maybe_update_state(:UserUpdate, %{"clear" => ["StatusText"]}, state) do
-    %{state | current_status: Map.delete(state.current_status, "text")}
+    new_status = Map.delete(state.current_status, "text")
+    push_new_status(new_status, state)
+    %{state | current_status: new_status}
   end
 
   defp maybe_update_state(_, _, state), do: state
+
+  defp push_new_status(status, state) do
+    :ets.insert(:presences, {state.user_id, {online_from_status(status), status}})
+  end
 
   defp ensure_gdm_subscriptions(channels) do
     Enum.each(Map.keys(channels), fn channel_id ->
@@ -303,6 +310,7 @@ defmodule StoatGateway.Presence do
   end
 
   def online_from_status(%{"presence" => "Invisible"}), do: false
+  def online_from_status(%{"presence" => :Invisible}), do: false
   def online_from_status(%{"presence" => _}), do: true
   def online_from_status(_status), do: true
 
