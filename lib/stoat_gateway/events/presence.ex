@@ -52,9 +52,9 @@ defmodule StoatGateway.Presence do
   def handle_continue(:ensure_init, %__MODULE__{} = state) do
     Tracer.with_span :presence_ensure_init do
       Tracer.set_attribute(:user_id, state.user_id)
+      ensure_online_set_subscription(state)
       ensure_gdm_subscriptions(state.dm_channels)
       ensure_friend_subscriptions(state.relationships)
-      ensure_online_set_subscription(state)
       online = online_from_status(state.current_status)
       :ets.insert(:presences, {state.user_id, {online, state.current_status}})
       subscribers_dispatch(build_user_update(online, state.current_status, state), state)
