@@ -34,7 +34,7 @@ defmodule StoatGateway.Web.Router do
     end
   end
 
-  get _ do
+  match _ do
     send_resp(conn, 404, "Not Found")
   end
 
