@@ -21,7 +21,8 @@ defmodule StoatGateway.Session do
   # Arbitrary 20s timeout to resume
   @socket_disconnect_timeout 5_000
 
-  defstruct ready: false,
+  defstruct id: nil,
+            ready: false,
             ready_fields: %ReadyFields{},
             user_id: nil,
             data: %{},
@@ -37,6 +38,7 @@ defmodule StoatGateway.Session do
             linked_servers: []
 
   @type t :: %__MODULE__{
+          id: String.t(),
           ready: boolean(),
           ready_fields: ReadyFields.t(),
           user_id: String.t(),
@@ -104,21 +106,24 @@ defmodule StoatGateway.Session do
     end
   end
 
-  def init({state, trace}) do
+  def init({%__MODULE__{} = state, trace}) do
+    id = :crypto.strong_rand_bytes(16) |> Base.encode16()
+    Logger.metadata(user_id: state.user_id, session_id: state.id, span_id: trace)
+    Logger.info("session init type: #{state.type}")
     Tracer.set_current_span(trace)
     :telemetry.execute([:gateway, :session, :init], %{}, %{type: state.type})
-    Logger.debug("session: init self: #{inspect(self())} with state: #{inspect(state)}")
     Process.monitor(state.linked_socket)
-    Registry.register(Stoat.Sessions, state.user_id, state.session)
+    Registry.register(Stoat.Sessions, state.user_id, id)
     # let the socket know of the PID in case we have error'd and are a new Process
     send(state.linked_socket, {:session_ack, self()})
-    {:ok, state, {:continue, :ready}}
+    {:ok, %{state | id: id}, {:continue, :ready}}
   end
 
   def handle_continue(:ready, %__MODULE__{} = state) do
     Tracer.with_span :handle_continue_ready do
-      Tracer.set_attribute("session.id", state.session)
+      Tracer.set_attribute("session.id", state.id)
       Tracer.set_attribute("user.id", state.user_id)
+      Tracer.set_attribute("user.session", state.session)
       user = Stoat.User.fetch_by_id(state.user_id)
       state = %{state | data: user}
 
@@ -275,7 +280,7 @@ defmodule StoatGateway.Session do
         :ensure_link_servers,
         %__MODULE__{servers: servers, memberships: memberships} = state
       ) do
-    Logger.debug("session<#{inspect(self())}>: continue link servers")
+    Logger.debug("session continue link servers")
 
     Tracer.with_span :ensure_link_servers do
       server_pids =
@@ -287,7 +292,7 @@ defmodule StoatGateway.Session do
 
           GenServer.cast(
             pid,
-            {:session_link_async, state.session, state.type, state.user_id, self(), member}
+            {:session_link_async, state.id, state.type, state.user_id, self(), member}
           )
 
           Tracer.add_event("server_link.session_link_async", %{server_id: server_id})
@@ -301,12 +306,10 @@ defmodule StoatGateway.Session do
   end
 
   def handle_cast({:presence_init_link, dm_channels}, %__MODULE__{} = state) do
-    Logger.debug(
-      "session=#{state.session} init presence link with channels #{inspect(dm_channels)}"
-    )
+    Logger.debug("session init presence link")
 
     Tracer.with_span :presence_init_link do
-      Redix.command(:redix, ["SADD", "sessions:#{state.user_id}", state.session])
+      Redix.command(:redix, ["SADD", "sessions:#{state.user_id}", state.id])
       Tracer.add_event(":presence_init_link.sessions_redis_SADD", %{})
 
       relationships = Map.get(state.data, "relations", [])
@@ -336,7 +339,7 @@ defmodule StoatGateway.Session do
 
       GenServer.cast(
         presence_pid,
-        {:session_link_async, state.session, state.type, self(), status}
+        {:session_link_async, state.id, state.type, self(), status}
       )
 
       Tracer.add_event(":presence_init_link.session_link_async", %{})
@@ -390,7 +393,7 @@ defmodule StoatGateway.Session do
   def handle_info({:event_server_create, id, pid}, state) do
     GenServer.cast(
       pid,
-      {:session_link_async, state.session, state.type, state.user_id, self(), %{"roles" => []}}
+      {:session_link_async, state.id, state.type, state.user_id, self(), %{"roles" => []}}
     )
 
     ref = Process.monitor(pid)
@@ -408,9 +411,7 @@ defmodule StoatGateway.Session do
 
   def handle_info({:DOWN, _ref, :process, pid, _}, %__MODULE__{} = state)
       when pid == state.linked_socket do
-    Logger.debug(
-      "session: #{inspect(self())} received :DOWN from linked socket- into nonforward mode"
-    )
+    Logger.debug("session received :DOWN from linked socket - exiting...")
 
     Process.send_after(self(), :check_socket_timeout, @socket_disconnect_timeout)
     {:noreply, %{state | forwarding: false}}
@@ -427,10 +428,10 @@ defmodule StoatGateway.Session do
   def handle_info(:check_socket_timeout, %__MODULE__{} = state) do
     case Process.alive?(state.linked_socket) do
       true ->
-        {:ok, state}
+        {:noreply, state}
 
       _ ->
-        Logger.debug("session: terminating session #{inspect(self())} due to socket timeout")
+        Logger.debug("session terminating due to socket timeout")
         {:stop, :normal, state}
     end
   end
@@ -442,7 +443,7 @@ defmodule StoatGateway.Session do
 
         GenServer.cast(
           pid,
-          {:session_link_async, state.session, state.type, self(), status}
+          {:session_link_async, state.id, state.type, self(), status}
         )
 
         {:noreply, %{state | linked_presence: pid}}
@@ -597,8 +598,8 @@ defmodule StoatGateway.Session do
   # Clean-up important state
   def terminate(reason, state) do
     Tracer.add_event("session.terminate", %{reason: reason})
-    Registry.unregister_match(Stoat.Sessions, state.user_id, state.session)
-    Redix.command(:redix, ["SREM", "sessions:#{state.user_id}", state.session])
+    Registry.unregister_match(Stoat.Sessions, state.user_id, state.id)
+    Redix.command(:redix, ["SREM", "sessions:#{state.user_id}", state.id])
   end
 
   def code_change(_old_vsn, state, _extra), do: {:ok, state}
