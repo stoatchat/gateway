@@ -31,16 +31,19 @@ defmodule StoatGateway.Server do
   end
 
   def init(%__MODULE__{} = state) do
+    Logger.metadata(server_id: state.id)
+
     channels =
       Stoat.Server.fetch_channels(state.id)
       |> Map.new(fn %{"_id" => id} = channel -> {id, channel} end)
 
     case Stoat.Server.fetch_by_id(state.id) do
       %{"_id" => _} = server ->
+        Logger.info("server init")
         {:ok, %{state | data: server, channels: channels}, {:continue, :ensure_init_state}}
 
       nil ->
-        Logger.warning("server: terminating server init #{inspect(state.id)} due to nil data")
+        Logger.warning("terminating server init #{inspect(state.id)} due to nil data")
         {:stop, :not_found}
     end
   end
@@ -60,7 +63,7 @@ defmodule StoatGateway.Server do
         {:session_link_async, session_id, session_type, user_id, session_pid, member_data},
         state
       ) do
-    Logger.debug("server:#{inspect(self())} add session:#{user_id}:#{inspect(session_pid)}")
+    Logger.info("server link session:#{user_id}:#{inspect(session_pid)}")
     ref = Process.monitor(session_pid)
 
     session = %{
@@ -235,8 +238,6 @@ defmodule StoatGateway.Server do
         %{"id" => channel_id, "clear" => clear, "data" => data},
         state
       ) do
-    Logger.debug("server: push_state_changes: :ChannelUpdate")
-
     new_channels =
       Map.update!(state.channels, channel_id, fn channel ->
         Enum.reduce(clear, channel, fn key, channel ->
@@ -349,7 +350,6 @@ defmodule StoatGateway.Server do
   def dispatch_maybe_bulk([], _), do: nil
 
   def dispatch_maybe_bulk([payload] = _events, session) do
-    Logger.debug("server: dispatch_maybe_bulk single event #{session.user_id}")
     send(session.pid, {:socket_dispatch, {payload.type, payload}})
   end
 

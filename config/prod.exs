@@ -20,3 +20,5 @@ config :opentelemetry,
 config :opentelemetry_exporter,
   otlp_protocol: :http_protobuf,
   otlp_endpoint: System.get_env("OTEL_ENDPOINT", "http://localhost:10428/insert/opentelemetry")
+
+config :logger, level: :info

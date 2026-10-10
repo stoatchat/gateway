@@ -45,7 +45,9 @@ defmodule StoatGateway.Presence do
     end
   end
 
-  def init(state) do
+  def init(%__MODULE__{user_id: user_id} = state) do
+    Logger.metadata(user_id: user_id)
+    Logger.info("presence init")
     {:ok, state, {:continue, :ensure_init}}
   end
 
@@ -90,15 +92,6 @@ defmodule StoatGateway.Presence do
     {:noreply, state}
   end
 
-  def handle_call(:fetch_presence_status, _from, state) do
-    # NOTE: potential hot-path, calls could fail in a thundering herde scenario but unlikely
-    {:reply, {true, state.current_status}, state}
-  end
-
-  def handle_call({:update_gdm_channels, _gdm_channels, _session_id}, state) do
-    {:ok, state}
-  end
-
   def handle_info({:presence_server_create, {server_id, pid}}, state) do
     # NOTE: maybe tie-into existing socket dispatch and send an event in the future?
     Enum.each(state.sessions, &send(&1.pid, {:event_server_create, server_id, pid}))
@@ -106,7 +99,8 @@ defmodule StoatGateway.Presence do
   end
 
   def handle_info({:dm_event_dispatch, {event, data} = payload}, state) do
-    Logger.debug("presence: dm_event -> #{inspect(event)}#{inspect(data)}")
+    Logger.debug("presence(#{inspect(self())}): dm_event_dispatch -> #{inspect(event)}")
+
     session_dispatch(payload, state)
     new_state = maybe_update_state(event, data, state)
     {:noreply, new_state}
@@ -149,7 +143,8 @@ defmodule StoatGateway.Presence do
   end
 
   def handle_info({:presence_event_dispatch, {event, data} = payload}, state) do
-    Logger.debug("presence: event_dispatch -> #{inspect(event)}#{inspect(data)}")
+    Logger.debug("presence(#{inspect(self())}): session_dispatch -> #{inspect(event)}")
+
     session_dispatch(payload, state)
     new_state = maybe_update_state(event, data, state)
     {:noreply, new_state}
@@ -205,14 +200,12 @@ defmodule StoatGateway.Presence do
   end
 
   defp maybe_update_state(:ChannelCreate, %{"_id" => channel_id} = data, state) do
-    Logger.debug("presence: updating gdm subscriptions for channel: #{channel_id}")
     :pg.join(:gdm_channels, channel_id, self())
     reduced_channel = Map.take(data, ["_id", "active", "channel_type", "recipients"])
     %{state | dm_channels: Map.put(state.dm_channels, channel_id, reduced_channel)}
   end
 
   defp maybe_update_state(:ChannelGroupLeave, %{"id" => channel_id}, state) do
-    Logger.debug("presence: updating gdm subscriptions for channel: #{channel_id}")
     :pg.leave(:gdm_channels, channel_id, self())
     %{state | dm_channels: Map.delete(state.dm_channels, channel_id)}
   end
