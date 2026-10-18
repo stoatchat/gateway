@@ -205,7 +205,12 @@ defmodule StoatGateway.Presence do
     %{state | dm_channels: Map.put(state.dm_channels, channel_id, reduced_channel)}
   end
 
-  defp maybe_update_state(:ChannelGroupLeave, %{"id" => channel_id}, state) do
+  defp maybe_update_state(
+         :ChannelGroupLeave,
+         %{"id" => channel_id, "user" => user_id},
+         %__MODULE__{} = state
+       )
+       when user_id == state.user_id do
     :pg.leave(:gdm_channels, channel_id, self())
     %{state | dm_channels: Map.delete(state.dm_channels, channel_id)}
   end
