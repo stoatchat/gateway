@@ -22,7 +22,7 @@ defmodule StoatGateway.Web.Router do
           |> WebSockAdapter.upgrade(
             StoatGateway.Web.SocketHandler,
             {headers, Tracer.current_span_ctx()},
-            timeout: 45_000
+            timeout: 80_000
           )
           |> halt()
         end
