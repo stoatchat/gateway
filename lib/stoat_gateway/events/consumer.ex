@@ -94,7 +94,7 @@ defmodule StoatGateway.Events.Consumer do
 
   def handle_event("ChannelUpdate", data), do: handle_channel_event(:ChannelUpdate, data)
   def handle_event("ChannelDelete", data), do: handle_channel_event(:ChannelDelete, data)
-  def handle_event("ChannelGroupLeave", data), do: handle_channel_event(:ChannelGroupleave, data)
+  def handle_event("ChannelGroupLeave", data), do: handle_channel_event(:ChannelGroupLeave, data)
   def handle_event("ChannelGroupJoin", data), do: handle_channel_event(:ChannelGroupJoin, data)
 
   def handle_event("VoiceChannelJoin", data), do: handle_channel_event(:VoiceChannelJoin, data)
