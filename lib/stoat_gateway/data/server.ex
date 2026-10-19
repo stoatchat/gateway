@@ -34,6 +34,9 @@ defmodule Stoat.Server do
 
       {:ok, value} when is_binary(value) ->
         String.to_integer(value)
+
+      {:error, _} ->
+        nil
     end
   end
 end

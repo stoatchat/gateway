@@ -96,11 +96,23 @@ defmodule StoatGateway.Server do
     {:noreply, new_state}
   end
 
-  def handle_cast({:dispatch_typing, event, channel_id, user_id}, state) do
-    GenServer.cast(
-      self(),
-      {:dispatch, event, %{type: Atom.to_string(event), id: channel_id, user: user_id}}
-    )
+  def handle_cast({:dispatch_typing, event, channel_id, user_id}, %__MODULE__{} = state) do
+    channel = Map.get(state.channels, channel_id)
+
+    session = Map.get(state.linked_sessions, user_id)
+    partial_user = partial_from_session(session)
+
+    case Stoat.Permissions.permissions_for_channel(channel, partial_user, state.data)
+         |> Stoat.Permissions.has_permission?(Stoat.Permissions.Bits.view_channel()) do
+      true ->
+        GenServer.cast(
+          self(),
+          {:dispatch, event, %{type: Atom.to_string(event), id: channel_id, user: user_id}}
+        )
+
+      _ ->
+        nil
+    end
 
     {:noreply, state}
   end
