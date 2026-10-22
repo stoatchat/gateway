@@ -96,10 +96,15 @@ defmodule StoatGateway.Server do
     {:noreply, new_state}
   end
 
-  def handle_cast({:dispatch_typing, event, channel_id, user_id}, %__MODULE__{} = state) do
+  def handle_cast(
+        {:dispatch_typing, event, channel_id, user_id, session_id},
+        %__MODULE__{} = state
+      ) do
     channel = Map.get(state.channels, channel_id)
 
-    session = Map.get(state.linked_sessions, user_id)
+    session =
+      Enum.find(state.linked_sessions, %{}, fn session -> session.session_id == session_id end)
+
     partial_user = partial_from_session(session)
 
     case Stoat.Permissions.permissions_for_channel(channel, partial_user, state.data)
