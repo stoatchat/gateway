@@ -162,6 +162,10 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("UserRelationship", data), do: handle_presence_event(:UserRelationship, data)
   def handle_event("UserPlatformWipe", _data), do: nil
 
+  def handle_event("DeleteSession", data), do: handle_presence_event(:DeleteSession, data)
+  def handle_event("DeleteAllSessions", data), do: handle_presence_event(:DeleteAllSessions, data)
+  def handle_event("Logout", data), do: handle_presence_event(:Logout, data)
+
   def handle_event("Bees", data), do: handle_presence_event(:Bees, data)
 
   def handle_event(_, _), do: nil

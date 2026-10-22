@@ -347,13 +347,16 @@ defmodule StoatGateway.Session do
     end
   end
 
-  def handle_cast({:event_typing, event, channel_id}, state) do
+  def handle_cast(
+        {:event_typing, event, channel_id},
+        %__MODULE__{user_id: user, session: session} = state
+      ) do
     # we can then move more state onto the server process and calculate it all there?
     # benefit would be less state everywhere and the server can probably cache all of this
     case Enum.find(state.channels, fn %{"_id" => id} -> id == channel_id end) do
       %{"server" => server_id} ->
         case Enum.find(state.linked_servers, fn {id, _, _} -> id == server_id end) do
-          {_, pid, _} -> GenServer.cast(pid, {:dispatch_typing, event, channel_id, state.user_id})
+          {_, pid, _} -> GenServer.cast(pid, {:dispatch_typing, event, channel_id, user, session})
           _ -> nil
         end
 
@@ -379,6 +382,25 @@ defmodule StoatGateway.Session do
     send(socket, {:event_dispatch_raw, new_body})
 
     {:noreply, state}
+  end
+
+  def handle_info(
+        :socket_dispatch,
+        {:DeleteSession, %{"session_id" => session_id} = body},
+        %__MODULE__{session: session, linked_socket: socket} = state
+      )
+      when session_id == session do
+    send(socket, {:event_dispatch_raw, body})
+    {:stop, :session_logout_normal, state}
+  end
+
+  def handle_info(
+        :socket_dispatch,
+        {:DeleteAllSessions, body},
+        %__MODULE__{linked_socket: socket} = state
+      ) do
+    send(socket, {:event_dispatch_raw, body})
+    {:stop, :session_logout_normal, state}
   end
 
   def handle_info({:socket_dispatch, {_event, body}}, %{linked_socket: socket} = state)
