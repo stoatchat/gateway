@@ -404,7 +404,7 @@ defmodule StoatGateway.Server do
           partial_user = partial_from_session(session)
 
           Stoat.Permissions.permissions_for_channel(channel, partial_user, state.data)
-          |> Stoat.Permissions.has_permission?(Stoat.Permissions.Bits.view_channel())
+          |> Stoat.Permissions.has_permission?(Stoat.Permissions.Bits.send_message())
         end)
 
       false ->
