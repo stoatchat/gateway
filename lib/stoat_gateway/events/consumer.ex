@@ -1,4 +1,5 @@
 defmodule StoatGateway.Events.Consumer do
+  require Logger
   use Broadway
 
   def start_link(_) do
@@ -213,6 +214,20 @@ defmodule StoatGateway.Events.Consumer do
     Enum.each(subscriptions, fn pid ->
       send(pid, {:dm_event_dispatch, {event, data}})
     end)
+  end
+
+  # Handle any Presence-less UserUpdate events e.g., Bonfire connected sessions
+  defp handle_presence_event(:UserUpdate, {user_id, data}) do
+    Logger.debug("headless presence dispatch")
+
+    case StoatGateway.Presence.lookup(user_id) do
+      {:ok, pid} ->
+        send(pid, {:presence_event_dispatch, {:UserUpdate, data}})
+
+      _ ->
+        :pg.get_local_members(:presence, user_id)
+        |> Enum.each(&send(&1, {:presence_update, {:UserUpdate, data}}))
+    end
   end
 
   defp handle_presence_event(event, {user_id, data}) do
