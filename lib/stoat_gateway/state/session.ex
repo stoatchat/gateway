@@ -408,6 +408,17 @@ defmodule StoatGateway.Session do
   end
 
   def handle_info(
+        {
+          :socket_dispatch,
+          {:Logout, body}
+        },
+        %__MODULE__{linked_socket: socket} = state
+      ) do
+    send(socket, {:event_dispatch_raw, body})
+    {:stop, :session_logout_normal, state}
+  end
+
+  def handle_info(
         {:socket_dispatch, {:ServerCreate, {%{"id" => server_id} = payload, pid}}},
         %__MODULE__{linked_socket: socket} = state
       )
