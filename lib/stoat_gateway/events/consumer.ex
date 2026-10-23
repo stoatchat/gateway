@@ -119,12 +119,12 @@ defmodule StoatGateway.Events.Consumer do
     do: handle_channel_event(:UserVoiceStateUpdate, data)
 
   # Server scoped events
-  def handle_event("ServerCreate", {_, %{"id" => id, "server" => %{"owner" => owner_id}}}) do
+  def handle_event("ServerCreate", {user_id, %{"id" => id}}) do
     # NOTE: Event gives us all the data so we need a different start_link pattern match
     # NOTE: ServerMemberJoin likely starts the server so this is just to link the owner...
     {_, server_pid} = StoatGateway.Server.lookup_or_start(id)
 
-    case StoatGateway.Presence.lookup(owner_id) do
+    case StoatGateway.Presence.lookup(user_id) do
       {:ok, pid} -> send(pid, {:presence_server_create, {id, server_pid}})
       _ -> nil
     end
