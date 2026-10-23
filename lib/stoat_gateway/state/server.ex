@@ -301,6 +301,17 @@ defmodule StoatGateway.Server do
     %{state | channels: Map.delete(state.channels, channel_id)}
   end
 
+  def push_state_changes(:ServerMemberLeave, %{"user" => user_id}, %__MODULE__{} = state) do
+    :pg.leave(:presence, user_id, self())
+
+    new_sessions =
+      Enum.reject(state.linked_sessions, fn session ->
+        session.user_id == user_id
+      end)
+
+    %{state | linked_sessions: new_sessions}
+  end
+
   def push_state_changes(_, _, state), do: state
 
   def update_visibility_for_sessions(sessions, old_state, new_state) do
