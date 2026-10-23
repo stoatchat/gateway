@@ -388,8 +388,7 @@ defmodule StoatGateway.Session do
   end
 
   def handle_info(
-        :socket_dispatch,
-        {:DeleteSession, %{"session_id" => session_id} = body},
+        {:socket_dispatch, {:DeleteSession, %{"session_id" => session_id} = body}},
         %__MODULE__{session: session, linked_socket: socket} = state
       )
       when session_id == session do
@@ -398,12 +397,29 @@ defmodule StoatGateway.Session do
   end
 
   def handle_info(
-        :socket_dispatch,
-        {:DeleteAllSessions, body},
+        {
+          :socket_dispatch,
+          {:DeleteAllSessions, body}
+        },
         %__MODULE__{linked_socket: socket} = state
       ) do
     send(socket, {:event_dispatch_raw, body})
     {:stop, :session_logout_normal, state}
+  end
+
+  def handle_info(
+        {:socket_dispatch, {:ServerCreate, {%{"id" => server_id} = payload, pid}}},
+        %__MODULE__{linked_socket: socket} = state
+      )
+      when is_pid(socket) do
+    GenServer.cast(
+      pid,
+      {:session_link_async, state.id, state.type, state.user_id, self(), %{"roles" => []}}
+    )
+
+    ref = Process.monitor(pid)
+    send(socket, {:event_dispatch_raw, payload})
+    {:noreply, %{state | linked_servers: [{server_id, pid, ref} | state.linked_servers]}}
   end
 
   def handle_info({:socket_dispatch, {_event, body}}, %{linked_socket: socket} = state)
@@ -414,17 +430,6 @@ defmodule StoatGateway.Session do
 
   # NOTE: SessionResume in future we'll buffer events here
   def handle_info({:socket_dispatch, _}, state), do: {:noreply, state}
-
-  def handle_info({:event_server_create, id, pid}, state) do
-    GenServer.cast(
-      pid,
-      {:session_link_async, state.id, state.type, state.user_id, self(), %{"roles" => []}}
-    )
-
-    ref = Process.monitor(pid)
-
-    {:noreply, %{state | linked_servers: [{id, pid, ref} | state.linked_servers]}}
-  end
 
   def handle_info({:presence_roundabout, payload}, %__MODULE__{} = state)
       when is_pid(state.linked_presence) do
