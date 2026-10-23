@@ -393,7 +393,7 @@ defmodule StoatGateway.Session do
       )
       when session_id == session do
     send(socket, {:event_dispatch_raw, body})
-    {:stop, :session_logout_normal, state}
+    {:stop, {:shutdown, :session_logout_normal}, state}
   end
 
   def handle_info(
@@ -404,7 +404,7 @@ defmodule StoatGateway.Session do
         %__MODULE__{linked_socket: socket} = state
       ) do
     send(socket, {:event_dispatch_raw, body})
-    {:stop, :session_logout_normal, state}
+    {:stop, {:shutdown, :session_logout_normal}, state}
   end
 
   def handle_info(
@@ -415,7 +415,7 @@ defmodule StoatGateway.Session do
         %__MODULE__{linked_socket: socket} = state
       ) do
     send(socket, {:event_dispatch_raw, body})
-    {:stop, :session_logout_normal, state}
+    {:stop, {:shutdown, :session_logout_normal}, state}
   end
 
   def handle_info(
