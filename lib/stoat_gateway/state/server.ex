@@ -316,7 +316,9 @@ defmodule StoatGateway.Server do
 
   def update_visibility_for_sessions(sessions, old_state, new_state) do
     Enum.each(sessions, fn session ->
-      new_session = Enum.find(new_state.linked_sessions, fn s -> session.user_id == s.user_id end)
+      new_session =
+        Enum.find(new_state.linked_sessions, fn s -> session.session_id == s.session_id end)
+
       update_visibility_for_session(session, new_session, old_state, new_state)
     end)
   end
