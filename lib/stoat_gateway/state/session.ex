@@ -35,7 +35,7 @@ defmodule StoatGateway.Session do
             channels: [],
             memberships: %{},
             users: [],
-            linked_servers: []
+            linked_servers: %{}
 
   @type t :: %__MODULE__{
           id: String.t(),
@@ -52,7 +52,7 @@ defmodule StoatGateway.Session do
           channels: list(),
           memberships: map(),
           users: list(),
-          linked_servers: list()
+          linked_servers: map()
         }
 
   def start_link(%{
@@ -283,25 +283,25 @@ defmodule StoatGateway.Session do
     Logger.debug("session continue link servers")
 
     Tracer.with_span :ensure_link_servers do
-      server_pids =
-        Enum.map(servers, fn {server_id, _} ->
-          {:ok, pid} = StoatGateway.Server.lookup_or_start(server_id)
-          # v2: we'll reduce DB calls and initially send server_ids as unavailable
-          # as servers are started the membership process will cause ServerAvailable events to get fired
-          member = Map.get(memberships, server_id)
 
-          GenServer.cast(
-            pid,
-            {:session_link_async, state.id, state.type, state.user_id, self(), member}
-          )
-
-          Tracer.add_event("server_link.session_link_async", %{server_id: server_id})
-
-          ref = Process.monitor(pid)
-          {server_id, pid, ref}
+      server_pids = Task.Supervisor.async_stream_nolink(Stoat.Tasks.Supervisor, Map.keys(servers),
+          fn id -> {id, StoatGateway.Server.lookup_or_start(id)} end,
+          max_concurrency: 16, timeout: 5_000, on_timeout: :kill_task, ordered: false)
+        |> Enum.flat_map(fn
+          {:ok, {id, {:ok, pid}}} -> [{id, pid}]
+          other -> Logger.warning("server link failed: #{inspect(other)}"); []
         end)
 
-      {:noreply, %{state | linked_servers: server_pids}}
+        linked =
+          Map.new(server_pids, fn {id, pid} ->
+            # v2: we'll reduce DB calls and initially send server_ids as unavailable
+            # as servers are started the membership process will cause ServerAvailable events to get fired
+            GenServer.cast(pid, {:session_link_async, state.id, state.type, state.user_id, self(), memberships[id]})
+            Tracer.add_event("server_link.session_link_async", %{server_id: id})
+
+            {id, {pid, Process.monitor(pid)}}
+          end)
+      {:noreply, %{state | linked_servers: linked}}
     end
   end
 
@@ -355,8 +355,8 @@ defmodule StoatGateway.Session do
     # benefit would be less state everywhere and the server can probably cache all of this
     case Enum.find(state.channels, fn %{"_id" => id} -> id == channel_id end) do
       %{"server" => server_id} ->
-        case Enum.find(state.linked_servers, fn {id, _, _} -> id == server_id end) do
-          {_, pid, _} ->
+        case Map.get(state.linked_servers, server_id) do
+          {pid, _} ->
             GenServer.cast(pid, {:dispatch_typing, event, channel_id, user, session_id})
 
           _ ->
@@ -430,7 +430,8 @@ defmodule StoatGateway.Session do
 
     ref = Process.monitor(pid)
     send(socket, {:event_dispatch_raw, payload})
-    {:noreply, %{state | linked_servers: [{server_id, pid, ref} | state.linked_servers]}}
+    new_linked = Map.put(state.linked_servers, server_id, {pid, ref})
+    {:noreply, %{state | linked_servers: new_linked}}
   end
 
   def handle_info({:socket_dispatch, {_event, body}}, %{linked_socket: socket} = state)

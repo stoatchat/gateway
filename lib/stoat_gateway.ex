@@ -8,6 +8,7 @@ defmodule StoatGateway do
 
     children = [
       StoatGateway.Telemetry.Supervisor,
+      {Task.Supervisor, name: Stoat.Tasks.Supervisor},
       {Mongo,
        [
          name: :mongo_db,
