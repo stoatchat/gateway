@@ -98,7 +98,7 @@ defmodule StoatGateway.Session do
   @spec lookup(binary(), binary()) :: {:ok, pid()} | {:error, atom()}
   def lookup(id, session_id) do
     case Registry.match(Stoat.Sessions, id, session_id) do
-      [{session_pid, nil}] ->
+      [{session_pid, _}] ->
         {:ok, session_pid}
 
       _ ->
@@ -139,8 +139,6 @@ defmodule StoatGateway.Session do
         |> Map.new(fn %{"_id" => id} = server ->
           {id, server}
         end)
-
-      Tracer.add_event("fetch_servers_feat_approx_count", %{})
 
       channel_ids = Map.values(servers) |> Enum.flat_map(& &1["channels"])
       user_channels = Stoat.User.fetch_user_channels(state.user_id)
@@ -190,7 +188,7 @@ defmodule StoatGateway.Session do
             Stoat.Tasks.Supervisor,
             &1,
             fn {key, fun} ->
-              OpenTelemetry.Ctx.attach(trace_ctx)
+              Tracer.set_current_span(trace_ctx)
               {key, fun.()}
             end,
             timeout: 10_000,
