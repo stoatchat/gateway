@@ -24,8 +24,15 @@ defmodule StoatGateway.Server do
                Stoat.Servers.Supervisor,
                {StoatGateway.Server, %{id: id}}
              ) do
-          {:ok, pid} -> {:ok, pid}
-          {:error, {:already_started, pid}} -> {:ok, pid}
+          {:ok, pid} ->
+            {:ok, pid}
+
+          {:error, {:already_started, pid}} ->
+            {:ok, pid}
+
+          {:error, reason} ->
+            Logger.error("server sup start_child failed with reason #{inspect(reason)}")
+            {:error, :big_fail}
         end
     end
   end
