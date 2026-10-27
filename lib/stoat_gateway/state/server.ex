@@ -284,7 +284,7 @@ defmodule StoatGateway.Server do
         if role_permissions != nil do
           Map.keys(role_permissions)
           |> Enum.flat_map(fn role -> filter_sessions_by_role(state.linked_sessions, role) end)
-          |> Enum.dedup_by(fn session -> session.session_id end)
+          |> Enum.uniq_by(fn session -> session.session_id end)
         else
           []
         end

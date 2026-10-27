@@ -169,7 +169,7 @@ defmodule StoatGateway.Session do
         Map.get(state.data, "relations", [])
         |> Enum.map(fn %{"_id" => id} -> id end)
         |> Enum.concat(dm_recipients)
-        |> Enum.dedup()
+        |> Enum.uniq()
 
       self_status = Map.get(user, "status", %{})
 
@@ -299,8 +299,6 @@ defmodule StoatGateway.Session do
             GenServer.cast(pid, {:session_link_async, state.id, state.type, state.user_id, self(), memberships[id]})
             Tracer.add_event("server_link.session_link_async", %{server_id: id})
 
-            {id, {pid, Process.monitor(pid)}}
-          end)
       {:noreply, %{state | linked_servers: linked}}
     end
   end
