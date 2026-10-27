@@ -108,7 +108,7 @@ defmodule StoatGateway.Session do
 
   def init({%__MODULE__{} = state, trace}) do
     id = :crypto.strong_rand_bytes(16) |> Base.encode16()
-    Logger.metadata(user_id: state.user_id, session_id: state.id, span_id: trace)
+    Logger.metadata(user_id: state.user_id, session_id: id, span_id: trace)
     Logger.info("session init type: #{state.type}")
     Tracer.set_current_span(trace)
     :telemetry.execute([:gateway, :session, :init], %{}, %{type: state.type})
