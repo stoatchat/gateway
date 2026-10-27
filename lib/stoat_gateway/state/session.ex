@@ -449,6 +449,8 @@ defmodule StoatGateway.Session do
           {:session_link_async, state.id, state.type, self(), status}
         )
 
+        Process.monitor(pid)
+
         {:noreply, %{state | linked_presence: pid}}
 
       _ ->
