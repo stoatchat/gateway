@@ -130,7 +130,7 @@ defmodule Stoat.Permissions do
         Enum.reduce(Map.get(member, "roles", []), calculated, fn role_id, acc ->
           role = Map.get(role_permissions, role_id, default_permissions_map())
 
-          Bitwise.bor(acc, calculate_permissions(role))
+          apply_override(acc, role)
         end)
     end
   end
@@ -157,10 +157,13 @@ defmodule Stoat.Permissions do
   defp calculate_final_permissions(default, []), do: default
 
   defp apply_channel_overwrites(permissions, %{"a" => a, "d" => d}) do
-    Bitwise.band(permissions, Bitwise.bnot(d))
-    |> Bitwise.bor(a)
+    permissions |> Bitwise.bor(a) |> Bitwise.band(Bitwise.bnot(d))
   end
 
   defp calculate_permissions(%{"a" => a, "d" => d}), do: Bitwise.band(a, Bitwise.bnot(d))
+
+  defp apply_override(permissions, %{"a" => a, "d" => d}),
+    do: permissions |> Bitwise.bor(a) |> Bitwise.band(Bitwise.bnot(d))
+
   defp default_permissions_map(), do: %{"a" => 0, "d" => 0}
 end
