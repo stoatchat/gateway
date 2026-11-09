@@ -233,7 +233,7 @@ defmodule StoatGateway.Session do
           Map.keys(servers),
           fn id -> {id, StoatGateway.Server.lookup_or_start(id)} end,
           max_concurrency: 16,
-          timeout: 5_000,
+          timeout: 10_000,
           on_timeout: :kill_task,
           ordered: false
         )
