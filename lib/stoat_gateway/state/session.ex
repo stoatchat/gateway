@@ -510,7 +510,15 @@ defmodule StoatGateway.Session do
 
     Enum.map(users, fn {id, user} ->
       relation_status = Map.get(relationships, id, nil)
-      {online, status} = maybe_get_presence(id, relation_status, state)
+
+      {online, status} =
+        case user do
+          %{"status" => status} ->
+            {StoatGateway.Presence.online_from_status(status), status}
+
+          %{} ->
+            maybe_get_presence(id, relation_status, state)
+        end
 
       Tracer.add_event("session.maybe_get_presence:fetch_presence_status", %{
         target_user_id: id
