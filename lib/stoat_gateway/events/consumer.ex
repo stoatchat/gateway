@@ -98,6 +98,12 @@ defmodule StoatGateway.Events.Consumer do
   def handle_event("ChannelGroupLeave", data), do: handle_channel_event(:ChannelGroupLeave, data)
   def handle_event("ChannelGroupJoin", data), do: handle_channel_event(:ChannelGroupJoin, data)
 
+  def handle_event("ChannelStartTyping", data),
+    do: handle_channel_event(:ChannelStartTyping, data)
+
+  def handle_event("ChannelStopTyping", data),
+    do: handle_channel_event(:ChannelStopTyping, data)
+
   def handle_event("VoiceChannelJoin", data), do: handle_channel_event(:VoiceChannelJoin, data)
   def handle_event("VoiceChannelLeave", data), do: handle_channel_event(:VoiceChannelLeave, data)
   def handle_event("VoiceChannelMove", data), do: handle_channel_event(:VoiceChannelMove, data)
