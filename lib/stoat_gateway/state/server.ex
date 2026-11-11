@@ -40,13 +40,14 @@ defmodule StoatGateway.Server do
   def init(%__MODULE__{} = state) do
     Logger.metadata(server_id: state.id)
 
-    channels =
-      Stoat.Server.fetch_channels(state.id)
-      |> Map.new(fn %{"_id" => id} = channel -> {id, channel} end)
-
     case Stoat.Server.fetch_by_id(state.id) do
       %{"_id" => _} = server ->
         Logger.info("server init")
+
+        channels =
+          Stoat.Server.fetch_channels(state.id)
+          |> Map.new(fn %{"_id" => id} = channel -> {id, channel} end)
+
         {:ok, %{state | data: server, channels: channels}, {:continue, :ensure_init_state}}
 
       nil ->
