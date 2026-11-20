@@ -487,7 +487,9 @@ defmodule StoatGateway.Session do
          )
        end},
       {fields.voice_states, :voice_states,
-       fn -> fetch_voice_states(filter_voice_enabled_channels(ctx.channels)) end}
+       fn -> fetch_voice_states(filter_voice_enabled_channels(ctx.channels)) end},
+      {fields.notification_settings, :notification_settings,
+       fn -> Stoat.User.fetch_notification_settings(state.user_id, Map.keys(ctx.servers)) end}
     ]
     |> Enum.filter(fn {enabled?, _key, _fun} -> enabled? end)
     |> Enum.map(fn {_, key, fun} -> {key, fun} end)

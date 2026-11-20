@@ -62,6 +62,14 @@ defmodule Stoat.User do
     |> Enum.to_list()
   end
 
+  def fetch_notification_settings(user_id, server_ids) do
+    Mongo.find(:mongo_db, "notification_settings", %{
+      "user" => user_id,
+      "%or" => [%{"server" => %{"$in" => server_ids}}, %{"server" => nil}]
+    })
+    |> Enum.to_list()
+  end
+
   def transform_badges(user_id, badges) do
     cutoff =
       get_in(Application.get_env(:stoat_gateway, :revolt), [

@@ -11,7 +11,8 @@ defmodule StoatGateway.Web.ReadyFields do
           voice_states: boolean(),
           user_settings: list(String.t()),
           channel_unreads: boolean(),
-          policy_changes: boolean()
+          policy_changes: boolean(),
+          notification_settings: list(map())
         }
   defstruct users: true,
             servers: true,
@@ -21,7 +22,8 @@ defmodule StoatGateway.Web.ReadyFields do
             voice_states: true,
             user_settings: [],
             channel_unreads: false,
-            policy_changes: true
+            policy_changes: true,
+            notification_settings: []
 
   @field_regex Regex.compile!("^(\\w+)(?:\\[(\\S+)\\])?$")
 
@@ -35,7 +37,8 @@ defmodule StoatGateway.Web.ReadyFields do
       voice_states: false,
       user_settings: [],
       channel_unreads: false,
-      policy_changes: false
+      policy_changes: false,
+      notification_settings: []
     }
   end
 
@@ -69,6 +72,10 @@ defmodule StoatGateway.Web.ReadyFields do
 
   def enable_field(fields, "policy_changes") do
     %{fields | policy_changes: true}
+  end
+
+  def enable_field(fields, "notification_settings") do
+    %{fields | notification_settings: true}
   end
 
   def enable_field(fields, field) do
