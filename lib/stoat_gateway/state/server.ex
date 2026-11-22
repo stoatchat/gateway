@@ -1,5 +1,5 @@
 defmodule StoatGateway.Server do
-  use GenServer
+  use GenServer, restart: :transient
   require Logger
 
   defstruct id: nil,
@@ -151,11 +151,24 @@ defmodule StoatGateway.Server do
       :pg.leave(:presence, user_id, self())
     end
 
+    if length(new_sessions) == 0 do
+      Process.send_after(self(), :maybe_inactive_shutdown, 10_000)
+    end
+
     {:noreply,
      %{
        state
        | linked_sessions: new_sessions
      }}
+  end
+
+  def handle_info(:maybe_inactive_shutdown, %__MODULE__{} = state)
+      when length(state.linked_sessions) == 0 do
+    {:stop, {:shutdown, :inactive}, state}
+  end
+
+  def handle_info(:maybe_inactive_shutdown, %__MODULE__{} = state) do
+    {:noreply, state}
   end
 
   def push_state_changes(
