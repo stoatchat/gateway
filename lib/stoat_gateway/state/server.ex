@@ -1,57 +1,88 @@
 defmodule StoatGateway.Server do
   use GenServer, restart: :transient
   require Logger
+  require OpenTelemetry.Tracer, as: Tracer
 
   defstruct id: nil,
             data: %{},
             channels: %{},
             linked_sessions: []
 
-  def start_link(%{id: id}) do
-    GenServer.start_link(__MODULE__, %__MODULE__{id: id},
+  def start_link(%{id: id, span_ctx: span_ctx}) do
+    GenServer.start_link(__MODULE__, {%__MODULE__{id: id}, span_ctx},
       name: {:via, Registry, {Stoat.Servers, id}}
     )
   end
 
   @spec lookup_or_start(binary()) :: {:ok, pid()} | {:error, atom()}
   def lookup_or_start(id) do
-    case Registry.lookup(Stoat.Servers, id) do
-      [{server_pid, nil}] ->
-        {:ok, server_pid}
+    Tracer.with_span "server.lookup_or_start", %{attributes: %{"server.id" => id}} do
+      case Registry.lookup(Stoat.Servers, id) do
+        [{server_pid, nil}] ->
+          Tracer.set_attribute("server.already_started", true)
+          {:ok, server_pid}
 
-      _ ->
-        case DynamicSupervisor.start_child(
-               Stoat.Servers.Supervisor,
-               {StoatGateway.Server, %{id: id}}
-             ) do
-          {:ok, pid} ->
-            {:ok, pid}
+        _ ->
+          Tracer.set_attribute("server.already_started", false)
 
-          {:error, {:already_started, pid}} ->
-            {:ok, pid}
+          case DynamicSupervisor.start_child(
+                 Stoat.Servers.Supervisor,
+                 {StoatGateway.Server, %{id: id, span_ctx: Tracer.current_span_ctx()}}
+               ) do
+            {:ok, pid} ->
+              {:ok, pid}
 
-          {:error, reason} ->
-            Logger.error("server sup start_child failed with reason #{inspect(reason)}")
-            {:error, :big_fail}
-        end
+            {:error, {:already_started, pid}} ->
+              {:ok, pid}
+
+            {:error, reason} ->
+              Logger.error("server sup start_child failed with reason #{inspect(reason)}")
+              Tracer.set_status(OpenTelemetry.status(:error, inspect(reason)))
+              {:error, :big_fail}
+          end
+      end
     end
   end
 
-  def init(%__MODULE__{} = state) do
+  def init({%__MODULE__{} = state, span_ctx}) do
     Logger.metadata(server_id: state.id)
+    Tracer.set_current_span(span_ctx)
 
-    channels =
-      Stoat.Server.fetch_channels(state.id)
-      |> Map.new(fn %{"_id" => id} = channel -> {id, channel} end)
+    Tracer.with_span "server.init" do
+      channels_task =
+        Task.async(fn ->
+          Tracer.set_current_span(span_ctx)
 
-    case Stoat.Server.fetch_by_id(state.id) do
-      %{"_id" => _} = server ->
-        Logger.info("server init")
-        {:ok, %{state | data: server, channels: channels}, {:continue, :ensure_init_state}}
+          Tracer.with_span "server.init.fetch_channels" do
+            Stoat.Server.fetch_channels(state.id)
+          end
+        end)
 
-      nil ->
-        Logger.warning("terminating server init #{inspect(state.id)} due to nil data")
-        {:stop, :not_found}
+      server_task =
+        Task.async(fn ->
+          Tracer.set_current_span(span_ctx)
+
+          Tracer.with_span "server.init.fetch_by_id" do
+            Stoat.Server.fetch_by_id(state.id)
+          end
+        end)
+
+      channels =
+        Task.await(channels_task)
+        |> Map.new(fn %{"_id" => id} = channel -> {id, channel} end)
+
+      fetch_result = Task.await(server_task)
+
+      case fetch_result do
+        %{"_id" => _} = server ->
+          Logger.info("server init")
+          {:ok, %{state | data: server, channels: channels}, {:continue, :ensure_init_state}}
+
+        nil ->
+          Logger.warning("terminating server init #{inspect(state.id)} due to nil data")
+          Tracer.set_status(OpenTelemetry.status(:error, "nil data"))
+          {:stop, :not_found}
+      end
     end
   end
 
