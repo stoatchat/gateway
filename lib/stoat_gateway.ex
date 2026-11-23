@@ -14,7 +14,7 @@ defmodule StoatGateway do
          name: :mongo_db,
          url: Application.get_env(:stoat_gateway, :mongodb),
          database: "revolt",
-         pool_size: 2
+         pool_size: 4
        ] ++ mongo_ssl_opts()},
       {Redix, {Application.get_env(:stoat_gateway, :redis), [name: :redix]}},
       StoatGateway.Events.Consumer,
