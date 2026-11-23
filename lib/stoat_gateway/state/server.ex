@@ -26,7 +26,7 @@ defmodule StoatGateway.Server do
           Tracer.set_attribute("server.already_started", false)
 
           case DynamicSupervisor.start_child(
-                 Stoat.Servers.Supervisor,
+                 {:via, PartitionSupervisor, {Stoat.Servers.Supervisor, id}},
                  {StoatGateway.Server, %{id: id, span_ctx: Tracer.current_span_ctx()}}
                ) do
             {:ok, pid} ->

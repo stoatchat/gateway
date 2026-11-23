@@ -24,7 +24,7 @@ defmodule StoatGateway do
       {Registry, keys: :duplicate, name: Stoat.Sessions},
       {Registry, keys: :unique, name: Stoat.Presence},
       {DynamicSupervisor, name: Stoat.Sessions.Supervisor, strategy: :one_for_one},
-      {DynamicSupervisor, name: Stoat.Servers.Supervisor, strategy: :one_for_one},
+      {PartitionSupervisor, child_spec: DynamicSupervisor, name: Stoat.Servers.Supervisor},
       {DynamicSupervisor, name: Stoat.Presence.Supervisor, strategy: :one_for_one},
       {Bandit,
        plug: StoatGateway.Web.Router,
